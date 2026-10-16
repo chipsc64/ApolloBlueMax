@@ -1,0 +1,26 @@
+# Build output (objects, generated assets, test binaries, snapshots)
+build/
+
+# Apollo executables and the headless build
+/bluemax-apollo*
+/bluemax-headless
+
+# Compiler and Python leftovers
+*.o
+*.d
+__pycache__/
+*.pyc
+
+# Working notes, porting log and analysis (kept locally)
+docs/
+
+# Reference recordings of the original game (not ours to publish)
+*.mp4
+*.mkv
+*.wav
+
+# Original Blue Max source and binaries: clone them from
+# https://gitlab.com/atari/bluemax instead (see README.md)
+CHBAS
+MAX.[1-4]
+EXXON.*
