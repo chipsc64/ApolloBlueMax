@@ -1,4 +1,5 @@
 #include "bm_platform.h"
+#include "bm_frame.h"
 #include "bm_ammx.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -100,8 +101,19 @@ static void upload_changed_palette(void){
     }
 }
 
-static int saga_open(BmPlatform *p,const BmFramebuffer *fb){
-    unsigned i;int ammx_result=bm_ammx_selftest();
+static int saga_open(BmPlatform *p,const BmFrame *frame){
+    const BmFramebuffer *fb=frame->indexed;
+    unsigned i;int ammx_result;
+    /* The SAGA backend shows the classic 320x200 CLUT8 frame (T35b adds
+       the larger direct-colour modes). */
+    if(frame->format.pixel!=BM_PIXEL_CLUT8||frame->format.width!=BM_SCREEN_WIDTH||
+       frame->format.height!=BM_SCREEN_HEIGHT||!fb){
+        printf("Blue Max: display format %ux%u/%d not supported\n",
+               (unsigned)frame->format.width,(unsigned)frame->format.height,
+               (int)frame->format.pixel);
+        return -1;
+    }
+    ammx_result=bm_ammx_selftest();
     if(ammx_result!=0){printf("Blue Max: AMMX self-test failed (%d)\n",ammx_result);return -1;}
     printf("Blue Max: AMMX self-test passed\n");
     bm_sprite_set_blitter(bm_sprite_blit_ammx);
@@ -225,7 +237,8 @@ static void audio_write(SagaState *s){
     s->render_ticks+=(uint32_t)(eclock64()-now);
 }
 
-static void saga_present(BmPlatform *p,const BmFramebuffer *fb){
+static void saga_present(BmPlatform *p,const BmFrame *frame){
+    const BmFramebuffer *fb=frame->indexed;
     SagaState *s=(SagaState*)p->userdata;s->pending=(uint8_t)(s->active^1u);
     copy_frame_for_saga(s->video[s->pending],fb->pixels);remember_palette(fb);
 }

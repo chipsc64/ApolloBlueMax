@@ -1,4 +1,5 @@
 #include "bm_game.h"
+#include "bm_renderer.h"
 #include "bm_sprite.h"
 #include "bm_tile.h"
 #include "bm_chbas_assets.h"
@@ -505,8 +506,9 @@ static void options_screen(BmFramebuffer *f,const BmGame *g){
     y+=(int)height;
   }
 }
-void bm_game_render(BmGame*g){
-  BmFramebuffer*f=&g->framebuffer;int x,y,p=g->player.x,q=g->player.y;palette(f,g);
+/* The classic renderer: the Atari picture into a 320x200 CLUT8 framebuffer. */
+static void classic_render(const BmGame*g,BmFramebuffer*f){
+  int x,y,p=g->player.x,q=g->player.y;palette(f,g);
   if(g->mode==BM_STATE_OPTIONS){options_screen(f,g);return;}
 #if BM_CLASSIC_TEST_PAGE
   static const BmAntic4Zone classic_zones[]={
@@ -840,6 +842,14 @@ void bm_game_render(BmGame*g){
 #endif
 #endif
 }
+static void classic_render_frame(const BmGame*g,BmFrame*frame){
+  classic_render(g,frame->indexed);
+}
+const BmRenderer bm_renderer_classic={
+  "classic",{BM_SCREEN_WIDTH,BM_SCREEN_HEIGHT,BM_PIXEL_CLUT8},classic_render_frame
+};
+/* The classic picture into the game's own framebuffer (tests and tools). */
+void bm_game_render(BmGame*g){classic_render(g,&g->framebuffer);}
 uint32_t bm_framebuffer_checksum(const BmFramebuffer*f){
   uint32_t h=2166136261u;unsigned i;for(i=0;i<sizeof(f->pixels);i++){h^=f->pixels[i];h*=16777619u;}return h;
 }

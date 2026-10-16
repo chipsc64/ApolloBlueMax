@@ -144,7 +144,8 @@ checksums.
 ```text
 include/            core interfaces (game, world, flight, POKEY, sound, platform)
 src/core/           portable game code: game.c, world.c, flight.c, collision.c,
-                    render.c, sprite.c, tile.c, pokey.c, sound.c
+                    render.c (classic renderer), renderer.c, sprite.c, tile.c,
+                    pokey.c, sound.c
 src/main.c          main loop
 platform/apollo/    SAGA video, audio, input and the AMMX blitter
 platform/headless/  backend for tests and the headless build

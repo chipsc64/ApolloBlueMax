@@ -1,4 +1,5 @@
 #include "bm_game.h"
+#include "bm_renderer.h"
 #ifndef BM_SOUND_TEST
 #define BM_SOUND_TEST 0
 #endif
@@ -37,15 +38,18 @@ int main(void) {
   static BmGame game; BmPlatform platform=bm_platform_create(); BmInput input={0};
   BmPokey *const pokeys[6]={&game.pokey,&game.pokey_extra[0],&game.pokey_extra[1],
     &game.pokey_extra[2],&game.pokey_extra[3],&game.pokey_extra[4]};
-  bm_game_boot(&game,0x424d4158u);
-  bm_game_render(&game);
+  const BmRenderer *renderer=bm_renderer_selected();
+  BmFrame frame={{0u,0u,BM_PIXEL_CLUT8},0,0,0u};
   unsigned due=1u;
-  if(!platform.open || platform.open(&platform,&game.framebuffer)!=0) return 1;
+  bm_game_boot(&game,0x424d4158u);
+  frame.format=renderer->format;frame.indexed=&game.framebuffer;
+  renderer->render(&game,&frame);
+  if(!platform.open || platform.open(&platform,&frame)!=0) return 1;
   while(!input.quit) {
     platform.poll_input(&platform,&input);
     while(due--) bm_game_tick(&game,&input);
-    bm_game_render(&game);
-    platform.present(&platform,&game.framebuffer);
+    renderer->render(&game,&frame);
+    platform.present(&platform,&frame);
 #if BM_SOUND_TEST
     sound_test(&game.pokey);
 #endif

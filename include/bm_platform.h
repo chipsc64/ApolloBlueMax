@@ -10,11 +10,13 @@ typedef struct {
   uint32_t palette[BM_PALETTE_SIZE];
 } BmFramebuffer;
 typedef struct BmPlatform BmPlatform;
+struct BmFrame;
 struct BmPlatform {
   void *userdata;
-  int (*open)(BmPlatform *, const BmFramebuffer *);
+  /* open picks the display mode for the renderer's frame format. */
+  int (*open)(BmPlatform *, const struct BmFrame *);
   void (*poll_input)(BmPlatform *, BmInput *);
-  void (*present)(BmPlatform *, const BmFramebuffer *);
+  void (*present)(BmPlatform *, const struct BmFrame *);
   /* The POKEYs to mix: one, or six with ENHANCED_SOUND. */
   void (*audio_tick)(BmPlatform *, BmPokey *const *, unsigned);
   /* Waits for the next vblank; returns the game updates due (one per
