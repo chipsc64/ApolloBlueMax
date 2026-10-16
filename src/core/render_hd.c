@@ -2,7 +2,11 @@
 #include "bm_profile.h"
 #include "bm_tile.h"
 #include "bm_art_assets.h"
+#include "bm_chbas_assets.h"
 #include <string.h>
+/* The art tool and the renderer agree on the sprite kinds. */
+typedef char bm_art_sprite_kinds_check[(int)BM_ART_SPRITE_KINDS==(int)BM_SPRITE_KINDS?1:-1];
+
 /* RENDERER=hd: 640x400 RGB565.  The classic picture decides what is where;
    every playfield pixel whose Atari colour has a texture in art/materials
    is drawn from that 16x16 texture, one texture per tile, so the texture
@@ -81,6 +85,46 @@ void bm_row_hd_c(const BmRowJob *job){
 BmRowConverter bm_row_hd=bm_row_hd_c;
 extern BmRowConverter bm_row_scale;
 
+/* Objects with art/sprites images: the classic renderer has left them out;
+   they are drawn here at twice their place, in the classic order.  Grey
+   pixels take the object's Atari colour; an object behind the playfield
+   (GPRIOR 4) only shows where the classic picture has COLBK. */
+static uint16_t tint(uint32_t rgb,uint16_t grey){
+  uint32_t r=((rgb>>16)&255u)*grey/255u,g=((rgb>>8)&255u)*grey/255u,b=(rgb&255u)*grey/255u;
+  return (uint16_t)((r>>3)<<11|(g>>2)<<5|(b>>3));
+}
+static void draw_sprites(BmFrame *frame){
+  unsigned k;
+  for(k=0;k<bm_sprite_list.count;++k){
+    const BmSpriteDraw *d=&bm_sprite_list.draw[k];
+    const BmArtSprite *a;
+    uint32_t colour;
+    int r,c;
+    if(!((uint32_t)BM_ART_SPRITE_COMPLETE&(1u<<d->kind)))continue;
+    a=bm_art_sprites[d->kind][d->variant%BM_ART_SPRITE_VARIANTS];
+    if(!a)continue;
+    colour=d->colour?bm_atari_pal_rgb[d->colour]:0u;
+    for(r=0;r<a->height;++r){
+      int y=2*d->y+r;
+      uint16_t *line;
+      if((unsigned)y>=frame->format.height)continue;
+      line=(uint16_t *)((uint8_t *)frame->pixels+(unsigned)y*frame->stride);
+      for(c=0;c<a->width;++c){
+        int x=2*d->x+c;
+        unsigned i=(unsigned)(r*a->width+c);
+        uint8_t m=a->mask[i];
+        if(!m||(unsigned)x>=frame->format.width)continue;
+        if(d->behind){
+          uint8_t under=classic.pixels[(unsigned)(y/2)*BM_SCREEN_WIDTH+(unsigned)(x/2)];
+          if(under!=BM_CLASSIC_INITIAL_BASE&&under!=BM_CLASSIC_DLI_BASE)continue;
+        }
+        line[x]=m==1u?a->pixels[i]:
+                colour?tint(colour,a->pixels[i]):tint(0xffffffu,a->pixels[i]);
+      }
+    }
+  }
+}
+
 static void hd_render(const BmGame *g,BmFrame *frame){
   const BmWorldBuffer *w=&g->classic_world;
   BmFrame source={{BM_SCREEN_WIDTH,BM_SCREEN_HEIGHT,BM_PIXEL_CLUT8},&classic,0,0u};
@@ -96,7 +140,9 @@ static void hd_render(const BmGame *g,BmFrame *frame){
   BmRowJob job;
   uint32_t profile;
   if(!packed_ready)pack_textures();
+  bm_sprite_hd_mask=BM_ART_SPRITE_COMPLETE;
   bm_renderer_classic.render(g,&source);
+  bm_sprite_hd_mask=0u;
   profile=bm_profile_start();
   for(i=0;i<BM_PALETTE_SIZE;++i){uint32_t c=rgb565(classic.palette[i]);pair[i]=c<<16|c;}
   /* XFLSH swaps the playfield colours: keep the flash flat.  The OPTION
@@ -123,6 +169,7 @@ static void hd_render(const BmGame *g,BmFrame *frame){
     }
     bm_row_hd(&job);
   }
+  draw_sprites(frame);
   bm_profile_stop(BM_PROFILE_CONVERT,profile);
 }
 const BmRenderer bm_renderer_hd={"hd",{640u,400u,BM_PIXEL_RGB565},hd_render};

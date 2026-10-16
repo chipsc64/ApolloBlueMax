@@ -123,8 +123,38 @@ art/materials/94.png    16x16, seamless: water (Atari colour $94)
 The file name is the Atari colour in hex. A texture covers one Atari tile
 (8x8 Atari pixels at 2x) and scrolls with the landscape. Colours without a
 texture, sprites, the status line and flashes stay as in the original.
-The two textures in the repository are generated examples
-(`tools/make_example_art.py`); replace them with real artwork. PNGs must be
+Objects (the aircraft, enemies, ships, vehicles, explosions, ...) can get
+images too, at twice the Atari size (an Atari sprite is 16 pixels wide, its
+image 32), with transparency:
+
+```text
+art/sprites/KIND_V.png  one variant of an object
+art/sprites/KIND.png    every variant of an object
+```
+
+| KIND | Variants (V) |
+|---|---|
+| `player` | 0/1 level, 2/3 banking left, 4/5 banking right (even/odd: propeller frame) |
+| `shadow` | 0 normal, 1 thin far shadow |
+| `crash` | 0/1 the two halves of the explosion |
+| `shot`, `enemy_shot`, `gunsight`, `capital` | 0 |
+| `bomb` | 0/1 the falling bomb's two phases |
+| `explosion` | 0 on land, 1 water splash |
+| `ship` | 0 afloat, 1 destroyed |
+| `vehicle` | bits: 1 truck, 2 driving left, 4 destroyed |
+| `enemy` | bits: 1 coming forward, 2/4 turning left/right, 8 wreck, 16 crash colour |
+| `enemy_shadow` | 0 behind, 1 forward fighter's shadow layer |
+| `gun_shot` | 0 shell, 1 shell burst |
+
+An object is drawn from its images only when every variant has one (or
+`KIND.png` exists); otherwise it stays as in the original. The image's
+top-left corner lands at twice the Atari sprite's top-left corner. Pure
+grey pixels (R=G=B) take the object's Atari colour, scaled by their grey
+level, so bonus targets keep their colour. Collisions always use the
+original shapes.
+
+The textures and the player's aircraft in the repository are generated
+examples (`tools/make_example_art.py`); replace them with real artwork. PNGs must be
 8-bit RGB, RGBA, grey or palette images. `tools/art_assets.py` converts
 them during the build, so no extra Python packages are needed.
 

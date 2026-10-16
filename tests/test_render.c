@@ -8,6 +8,17 @@
 static BmGame game;
 static uint16_t scaled[640u*400u],hd[640u*400u];
 static int failures;
+/* HD pixels inside an object drawn from art/sprites (and its classic box). */
+static int hd_sprite_area(unsigned x,unsigned y){
+  unsigned k;
+  for(k=0;k<bm_sprite_list.count;++k){
+    const BmSpriteDraw *d=&bm_sprite_list.draw[k];
+    int sx=2*d->x,sy=2*d->y;
+    if(!((uint32_t)BM_ART_SPRITE_COMPLETE&(1u<<d->kind)))continue;
+    if((int)x>=sx-2&&(int)x<sx+66&&(int)y>=sy-2&&(int)y<sy+66)return 1;
+  }
+  return 0;
+}
 static void check(int ok,const char *what){if(!ok){printf("FAIL: %s\n",what);++failures;}}
 static uint16_t rgb565(uint32_t c){
   return (uint16_t)(((c>>8)&0xf800u)|((c>>5)&0x07e0u)|((c>>3)&0x001fu));
@@ -44,10 +55,12 @@ int main(void){
       bm_renderer_classic.render(&game,&classic);
       bm_renderer_scaled.render(&game,&big);
       bm_renderer_hd.render(&game,&wide);
+      /* The list is the HD render's; compare outside its HD objects. */
       x0=(w->quake_shift?-2:0)+w->fine_phase*2-8;y0=-(int)w->fine_phase*2;
       for(y=0;y<400u;++y)for(x=0;x<640u;++x){
         unsigned cx=x/2u,cy=y/2u;
         uint8_t index=game.framebuffer.pixels[cy*BM_SCREEN_WIDTH+cx];
+        if(hd_sprite_area(x,y))continue;
         const uint8_t reg[5]={w->colbk,w->colpf0,w->colpf1,w->colpf2,w->colpf3};
         const uint16_t *t=(cy<BM_ATARI_PLAYFIELD_HEIGHT&&index>=16u&&index<=20u)?
                           bm_art_materials[reg[index-16u]]:0;
@@ -63,7 +76,8 @@ int main(void){
         unsigned r,c;
         for(r=1;r<20u;++r)for(c=1;c<39u;++c){
           int sx=x0+(int)c*8,sy=y0+(int)r*8,dx,dy,clean=1;
-          if(w->rows[r][w->source_column+c]!=0u)continue;
+          if(w->rows[r][w->source_column+c]!=0u||hd_sprite_area((unsigned)(2*sx),(unsigned)(2*sy))||
+             hd_sprite_area((unsigned)(2*sx+15),(unsigned)(2*sy+15)))continue;
           for(dy=0;dy<8&&clean;++dy)for(dx=0;dx<8;++dx)
             if(game.framebuffer.pixels[(sy+dy)*BM_SCREEN_WIDTH+sx+dx]!=17u){clean=0;break;}
           if(!clean)continue;
@@ -77,6 +91,31 @@ int main(void){
     check(textured>0u,"hd draws textured playfield pixels");
     check(!other_bad,"hd: textures where expected, the scaled picture elsewhere");
     check(tiles>0u&&!tile_bad,"hd: a grass tile shows the whole texture");
+  }
+  /* T36b: an object with art/sprites images is drawn from them at twice
+     its place (opaque pixels exactly; the classic one is left out). */
+  if((uint32_t)BM_ART_SPRITE_COMPLETE&(1u<<BM_SPRITE_PLAYER)){
+    BmFrame wide={{640u,400u,BM_PIXEL_RGB565},0,hd,640u*2u};
+    unsigned drawn=0,wrong=0,k;
+    bm_game_boot(&game,7u);
+    for(f=0;f<4000u;++f){
+      in.fire=0u;bm_game_tick(&game,&in);
+      if(game.mode!=BM_STATE_PLAYING||f%89u)continue;
+      bm_renderer_hd.render(&game,&wide);
+      for(k=0;k<bm_sprite_list.count;++k){
+        const BmSpriteDraw *d=&bm_sprite_list.draw[k];
+        const BmArtSprite *a=bm_art_sprites[BM_SPRITE_PLAYER][d->variant];
+        int r,c;
+        if(d->kind!=BM_SPRITE_PLAYER||d->behind||!a)continue;
+        for(r=0;r<a->height;++r)for(c=0;c<a->width;++c){
+          int xx=2*d->x+c,yy=2*d->y+r;
+          if(a->mask[r*a->width+c]!=1u||xx<0||xx>=640||yy<0||yy>=400)continue;
+          ++drawn;
+          if(hd[yy*640+xx]!=a->pixels[r*a->width+c])++wrong;
+        }
+      }
+    }
+    check(drawn>0u&&!wrong,"hd: the player is drawn from art/sprites");
   }
   /* T36a: the classic renderer lists the objects it draws; a kind in
      bm_sprite_hd_mask is listed but not drawn, and only its own box of

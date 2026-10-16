@@ -133,7 +133,7 @@ $(SNAPSHOT_BUILD)/frames/.stamp: tools/classic_snapshot.c src/core/flight.c src/
 	$(SNAPSHOT_BUILD)/classic-snapshot $(SNAPSHOT_BUILD)/frames
 	touch $@
 assets: $(ASSET_HEADER)
-$(ASSET_HEADER): tools/extract_chbas.py tools/music_data.py tools/art_assets.py $(CHBAS) $(CHBAS_BINARY_DIR)/MAX.4 $(wildcard art/materials/*.png)
+$(ASSET_HEADER): tools/extract_chbas.py tools/music_data.py tools/art_assets.py $(CHBAS) $(CHBAS_BINARY_DIR)/MAX.4 $(wildcard art/materials/*.png) $(wildcard art/sprites/*.png)
 	python3 tools/extract_chbas.py $(CHBAS) $(ASSET_BUILD) --binary-dir $(CHBAS_BINARY_DIR)
 	python3 tools/music_data.py $(CHBAS_BINARY_DIR)/MAX.4 $(ASSET_BUILD)/bm_music_data.h
 	python3 tools/art_assets.py art $(ASSET_BUILD)/bm_art_assets.h
