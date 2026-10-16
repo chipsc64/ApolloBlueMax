@@ -1,5 +1,6 @@
 #include "bm_world.h"
 #include "bm_chbas_assets.h"
+#include "bm_collision.h"
 #include "bm_geometry.h"
 #include <string.h>
 #ifndef BM_CLASSIC_TEST_PAGE
@@ -2465,8 +2466,7 @@ uint8_t bm_world_playfield_mask_collision(const BmWorldBuffer *buffer,
   uint16_t x,y;
   uint8_t latch=0u;
   if(!buffer||!pixels||stride<width)return 0u;
-  charset=buffer->tank_charset_loaded?bm_asset_max3_tank_charset:
-                                        bm_asset_max3_hangar_charset;
+  charset=bm_mask_playfield_charset(buffer->tank_charset_loaded);
   for(y=0;y<height;++y)for(x=0;x<width;++x){
     int sx,sy,column,row,pair;
     uint8_t code,glyph,value;

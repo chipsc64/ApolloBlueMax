@@ -8,7 +8,7 @@ test-flight:
 .PHONY: test-takeoff
 test-takeoff: $(ASSET_HEADER)
 	mkdir -p build/takeoff-test
-	$(HOST_CC) $(filter-out -DBM_ATARI_FLIGHT=$(ATARI_FLIGHT) -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE),$(HOST_CFLAGS)) -DBM_ATARI_FLIGHT=1 -DBM_CLASSIC_TEST_PAGE=1 tests/test_takeoff_game.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c -o build/takeoff-test/test
+	$(HOST_CC) $(filter-out -DBM_ATARI_FLIGHT=$(ATARI_FLIGHT) -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE),$(HOST_CFLAGS)) -DBM_ATARI_FLIGHT=1 -DBM_CLASSIC_TEST_PAGE=1 tests/test_takeoff_game.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c -o build/takeoff-test/test
 	build/takeoff-test/test
 CC := $(APOLLO_GCC_ROOT)/bin/m68k-amigaos-gcc
 AS := $(APOLLO_GCC_ROOT)/bin/vasmm68k_mot
@@ -72,7 +72,7 @@ CFLAGS += -DBM_SOUND_TEST=$(SOUND_TEST)
 CFLAGS += -DBM_ENHANCED_SOUND=$(ENHANCED_SOUND)
 CFLAGS += -DBM_TICK_RATE=$(TICK_RATE)
 LDFLAGS := -m68080 -m68881 -noixemul
-C_SOURCES := src/main.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c platform/apollo/platform_saga.c platform/apollo/ammx_selftest.c platform/apollo/sprite_ammx.c
+C_SOURCES := src/main.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/apollo/platform_saga.c platform/apollo/ammx_selftest.c platform/apollo/sprite_ammx.c
 S_SOURCES := platform/apollo/ammx_blit.s
 OBJECTS := $(patsubst %.c,$(BUILD)/%.o,$(C_SOURCES)) $(patsubst %.s,$(BUILD)/%.o,$(S_SOURCES))
 DEPENDENCIES := $(patsubst %.c,$(BUILD)/%.d,$(C_SOURCES))
@@ -86,7 +86,7 @@ test-pokey: $(ASSET_HEADER)
 .PHONY: test-scroll
 test-scroll: $(ASSET_HEADER)
 	mkdir -p build/scroll-test
-	$(HOST_CC) $(filter-out -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE) -DBM_ATARI_SCROLL=$(ATARI_SCROLL),$(HOST_CFLAGS)) -DBM_CLASSIC_TEST_PAGE=1 -DBM_ATARI_SCROLL=1 tests/test_scroll.c src/core/world.c src/core/tile.c -o build/scroll-test/test
+	$(HOST_CC) $(filter-out -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE) -DBM_ATARI_SCROLL=$(ATARI_SCROLL),$(HOST_CFLAGS)) -DBM_CLASSIC_TEST_PAGE=1 -DBM_ATARI_SCROLL=1 tests/test_scroll.c src/core/world.c src/core/collision.c src/core/tile.c -o build/scroll-test/test
 	build/scroll-test/test
 all: $(TARGET)
 upload: $(TARGET)
@@ -100,24 +100,24 @@ snapshots: $(SNAPSHOT_BUILD)/frames/.stamp
 boat-shot-snapshots: $(SNAPSHOT_BUILD)/boat-shot-snapshot
 	mkdir -p $(SNAPSHOT_BUILD)/boat-shots
 	$(SNAPSHOT_BUILD)/boat-shot-snapshot $(SNAPSHOT_BUILD)/boat-shots
-$(SNAPSHOT_BUILD)/boat-shot-snapshot: tools/boat_shot_snapshot.c tools/classic_snapshot.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c include/bm_flight.h include/bm_game.h include/bm_pokey.h include/bm_sound.h include/bm_platform.h include/bm_sprite.h include/bm_tile.h include/bm_world.h $(ASSET_HEADER)
+$(SNAPSHOT_BUILD)/boat-shot-snapshot: tools/boat_shot_snapshot.c tools/classic_snapshot.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c include/bm_flight.h include/bm_game.h include/bm_pokey.h include/bm_sound.h include/bm_platform.h include/bm_sprite.h include/bm_tile.h include/bm_world.h include/bm_collision.h $(ASSET_HEADER)
 	mkdir -p $(dir $@)
-	$(HOST_CC) $(filter-out -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE),$(HOST_CFLAGS)) -DBM_CLASSIC_TEST_PAGE=1 tools/boat_shot_snapshot.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c -o $@
-$(SNAPSHOT_BUILD)/frames/.stamp: tools/classic_snapshot.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c include/bm_flight.h include/bm_game.h include/bm_pokey.h include/bm_sound.h include/bm_platform.h include/bm_sprite.h include/bm_tile.h include/bm_world.h $(ASSET_HEADER)
+	$(HOST_CC) $(filter-out -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE),$(HOST_CFLAGS)) -DBM_CLASSIC_TEST_PAGE=1 tools/boat_shot_snapshot.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c -o $@
+$(SNAPSHOT_BUILD)/frames/.stamp: tools/classic_snapshot.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c include/bm_flight.h include/bm_game.h include/bm_pokey.h include/bm_sound.h include/bm_platform.h include/bm_sprite.h include/bm_tile.h include/bm_world.h include/bm_collision.h $(ASSET_HEADER)
 	mkdir -p $(SNAPSHOT_BUILD)/frames
-	$(HOST_CC) $(filter-out -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE),$(HOST_CFLAGS)) -DBM_CLASSIC_TEST_PAGE=1 tools/classic_snapshot.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c -o $(SNAPSHOT_BUILD)/classic-snapshot
+	$(HOST_CC) $(filter-out -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE),$(HOST_CFLAGS)) -DBM_CLASSIC_TEST_PAGE=1 tools/classic_snapshot.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c -o $(SNAPSHOT_BUILD)/classic-snapshot
 	$(SNAPSHOT_BUILD)/classic-snapshot $(SNAPSHOT_BUILD)/frames
 	touch $@
 assets: $(ASSET_HEADER)
 $(ASSET_HEADER): tools/extract_chbas.py tools/music_data.py $(CHBAS) $(CHBAS_BINARY_DIR)/MAX.4
 	python3 tools/extract_chbas.py $(CHBAS) $(ASSET_BUILD) --binary-dir $(CHBAS_BINARY_DIR)
 	python3 tools/music_data.py $(CHBAS_BINARY_DIR)/MAX.4 $(ASSET_BUILD)/bm_music_data.h
-$(HOST_BUILD)/bluemax-test: tests/test_game.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c include/bm_flight.h include/bm_game.h include/bm_pokey.h include/bm_sound.h include/bm_platform.h include/bm_sprite.h include/bm_tile.h include/bm_world.h $(ASSET_HEADER)
+$(HOST_BUILD)/bluemax-test: tests/test_game.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c include/bm_flight.h include/bm_game.h include/bm_pokey.h include/bm_sound.h include/bm_platform.h include/bm_sprite.h include/bm_tile.h include/bm_world.h include/bm_collision.h $(ASSET_HEADER)
 	mkdir -p $(dir $@)
-	$(HOST_CC) $(filter-out -DBM_ATARI_FLIGHT=$(ATARI_FLIGHT),$(HOST_CFLAGS)) -DBM_ATARI_FLIGHT=0 tests/test_game.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c -o $@
-$(HOST_BUILD)/bluemax-headless: src/main.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c platform/headless/platform_headless.c include/bm_flight.h include/bm_game.h include/bm_pokey.h include/bm_sound.h include/bm_platform.h include/bm_sprite.h include/bm_tile.h include/bm_world.h $(ASSET_HEADER)
+	$(HOST_CC) $(filter-out -DBM_ATARI_FLIGHT=$(ATARI_FLIGHT),$(HOST_CFLAGS)) -DBM_ATARI_FLIGHT=0 tests/test_game.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c -o $@
+$(HOST_BUILD)/bluemax-headless: src/main.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/headless/platform_headless.c include/bm_flight.h include/bm_game.h include/bm_pokey.h include/bm_sound.h include/bm_platform.h include/bm_sprite.h include/bm_tile.h include/bm_world.h include/bm_collision.h $(ASSET_HEADER)
 	mkdir -p $(dir $@)
-	$(HOST_CC) $(HOST_CFLAGS) src/main.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c platform/headless/platform_headless.c -o $@
+	$(HOST_CC) $(HOST_CFLAGS) src/main.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/headless/platform_headless.c -o $@
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 $(BUILD)/%.o: %.c Makefile

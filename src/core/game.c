@@ -1,6 +1,7 @@
 #include "bm_game.h"
 #include "bm_chbas_assets.h"
 #include "bm_geometry.h"
+#include "bm_collision.h"
 #include <string.h>
 #ifndef BM_ATARI_FLIGHT
 #define BM_ATARI_FLIGHT 0
@@ -45,28 +46,6 @@ static void score_s7(BmGame *g){
   }
   g->score+=100u;
 }
-/* Enemy aircraft P2 image; the composites carry P3 pixels as colour 9. */
-static const uint8_t *enemy_p2_mask(const BmWorldBuffer *w,int *height,
-                                    uint8_t *p2_value){
-  *p2_value=0u;
-  if(!w->enemy_fighter_forward&&w->enemy_fighter_turn==1u){
-    *height=BM_ASSET_BANK_LEFT_FRAME_1_HEIGHT;return bm_asset_bank_left_frame_1;
-  }
-  if(!w->enemy_fighter_forward&&w->enemy_fighter_turn==2u){
-    *height=BM_ASSET_BANK_RIGHT_FRAME_1_HEIGHT;return bm_asset_bank_right_frame_1;
-  }
-  *p2_value=10u;
-  if(w->enemy_fighter_forward&&w->enemy_fighter_turn==1u){
-    *height=BM_ASSET_FIGHTER_LEFT_HEIGHT;*p2_value=0u;return bm_asset_fighter_left;
-  }
-  if(w->enemy_fighter_forward&&w->enemy_fighter_turn==2u){
-    *height=BM_ASSET_FIGHTER_RIGHT_HEIGHT;*p2_value=0u;return bm_asset_fighter_right;
-  }
-  if(w->enemy_fighter_forward){
-    *height=BM_ASSET_FIGHTER_FORWARD_HEIGHT;return bm_asset_fighter_forward;
-  }
-  *height=BM_ASSET_FIGHTER_BACK_HEIGHT;return bm_asset_fighter_back;
-}
 static uint8_t enemy_p2_pixel(const uint8_t *mask,int index,uint8_t p2_value){
   return (uint8_t)(p2_value?mask[index]==p2_value:mask[index]!=0u);
 }
@@ -78,9 +57,7 @@ static uint8_t bomb_ship(BmGame *g,int sx,int sy){
   for(dy=-1;dy<=1;++dy)for(dx=0;dx<2;++dx){
     int px=sx+dx,py=sy+dy;
     int x=px-bm_pm_x(w->ship_x),y=py-bm_pm_y((int)w->ship_y-11);
-    if(px<0||px>=320||py<0||py>=BM_ATARI_PLAYFIELD_HEIGHT||x<0||x>=16)continue;
-    if(!((y>=0&&y<BM_ASSET_SHIP_LAYER_0_HEIGHT&&bm_asset_ship_layer_0[y*16+x])||
-      (y>=2&&y<2+BM_ASSET_SHIP_LAYER_1_HEIGHT&&bm_asset_ship_layer_1[(y-2)*16+x])))continue;
+    if(px<0||px>=320||py<0||py>=BM_ATARI_PLAYFIELD_HEIGHT||!bm_mask_ship(x,y))continue;
     w->ship_destroyed=1;w->ship_destroy_timer=120;w->ship_hits_remaining=0;
     w->gun2_shot_y=0;w->gun2_shot_explosion=0;
     w->impact_flash_ticks=12; /* BMBSHP -> ABA */
@@ -115,9 +92,7 @@ static void hit_ship(BmGame *g){
   for(step=0;step<=16;++step)for(p=0;p<4;++p){
     int sx=g->player_shot_x+step+p,sy=g->player_shot_y-step/2;
     int x=sx-bm_pm_x(w->ship_x),y=sy-bm_pm_y((int)w->ship_y-11);
-    if(sx<0||sx>=320||sy<0||sy>=BM_ATARI_PLAYFIELD_HEIGHT||x<0||x>=16)continue;
-    if(!((y>=0&&y<BM_ASSET_SHIP_LAYER_0_HEIGHT&&bm_asset_ship_layer_0[y*16+x])||
-         (y>=2&&y<2+BM_ASSET_SHIP_LAYER_1_HEIGHT&&bm_asset_ship_layer_1[(y-2)*16+x])))continue;
+    if(sx<0||sx>=320||sy<0||sy>=BM_ATARI_PLAYFIELD_HEIGHT||!bm_mask_ship(x,y))continue;
     g->player_shot_active=0; /* SHP23 -> HG */
     /* DEC $6DC: the counter is shared and only SHIP reloads it with 3. */
     w->ship_hits_remaining=--w->p2_hits;
@@ -140,7 +115,8 @@ static void hit_enemy_fighter(BmGame *g){
   int y=bm_pm_y(w->enemy_fighter_y);
   if(!g->player_shot_active||!w->enemy_in_line||!w->enemy_body_on||
      w->enemy_fighter_destroyed)return;
-  fighter=enemy_p2_mask(w,&height,&p2_value);
+  fighter=bm_mask_enemy_fighter(w->enemy_fighter_forward,w->enemy_fighter_turn,
+                                &height,&p2_value);
   /* M0PL is latched over TRIG's (+16,-8) step. */
   for(step=0;step<=16;++step)for(pixel=0;pixel<4;++pixel){
     int sx=g->player_shot_x+step+pixel;
@@ -170,16 +146,8 @@ static void river_vehicle_terrain_collision(BmGame *g){
   const uint8_t *body,*tyres,*charset;
   int height,cx,cy,x=bm_pm_x(w->river_car_x),y=bm_pm_y(w->river_car_y);
   if(!w->river_car_active||w->river_car_destroyed||w->river_car_y<70u)return;
-  charset=w->tank_charset_loaded?bm_asset_max3_tank_charset:bm_asset_max3_hangar_charset;
-  if(w->river_vehicle_truck){
-    body=w->river_car_left?bm_asset_truck_left_body:bm_asset_truck_right_body;
-    tyres=w->river_car_left?bm_asset_truck_left_tyres:bm_asset_truck_right_tyres;
-    height=6;
-  }else{
-    body=w->river_car_left?bm_asset_car_left_body:bm_asset_car_right_body;
-    tyres=w->river_car_left?bm_asset_car_left_tyres:bm_asset_car_right_tyres;
-    height=5;
-  }
+  charset=bm_mask_playfield_charset(w->tank_charset_loaded);
+  bm_mask_vehicle(w->river_vehicle_truck,w->river_car_left,&body,&tyres,&height);
   /* XP23 reads P2PF/P3PF ($D006/$D007), NOT missile latches.
      Bit 1 is COLPF1: the water pixels exposed by a broken bridge.
      Match opaque body/tyre pixels against ANTIC pair 10, not the
@@ -207,15 +175,7 @@ static void hit_river_vehicle(BmGame *g,int from_x,int from_y){
   int x=bm_pm_x(w->river_car_x),y=bm_pm_y(w->river_car_y);
   /* SHP23 gates M0PL/P2/P3 hits on F6-F5 < 28. */
   if(!w->river_car_active||w->river_car_destroyed||g->player.altitude>=28)return;
-  if(w->river_vehicle_truck){
-    body=w->river_car_left?bm_asset_truck_left_body:bm_asset_truck_right_body;
-    tyres=w->river_car_left?bm_asset_truck_left_tyres:bm_asset_truck_right_tyres;
-    height=6;
-  }else{
-    body=w->river_car_left?bm_asset_car_left_body:bm_asset_car_right_body;
-    tyres=w->river_car_left?bm_asset_car_left_tyres:bm_asset_car_right_tyres;
-    height=5;
-  }
+  bm_mask_vehicle(w->river_vehicle_truck,w->river_car_left,&body,&tyres,&height);
   /* Existing direct-shot behaviour: sweep the four-pixel missile across
      its (+16,-8) update. XP23 itself handles terrain, not this test. */
   for(step=0;step<=16;++step)for(pixel=0;pixel<4;++pixel){
@@ -243,7 +203,7 @@ const uint8_t *bm_game_shadow_pixels(const BmGame *g){
   unsigned r,c;
   for(r=0;r<8u;++r){
     uint8_t bits=0u;
-    for(c=0;c<8u;++c)if(bm_asset_shadow[r*16u+c*2u])bits|=(uint8_t)(0x80u>>c);
+    for(c=0;c<8u;++c)if(bm_mask_shadow()[r*16u+c*2u])bits|=(uint8_t)(0x80u>>c);
     rows[r]=bits;
   }
   if(g->shadow_far){rows[0]=0u;rows[7]=0u;rows[1]=0x44u;rows[6]=0x42u;}
@@ -287,7 +247,7 @@ static uint8_t flight_turn(BmGame *g,uint8_t stick){
 static uint8_t shadow_p1pf(const BmGame *g){
   return bm_world_playfield_mask_collision(&g->classic_world,
     bm_game_shadow_pixels(g),
-    16u,BM_ASSET_SHADOW_HEIGHT,16u,g->player.x,
+    BM_MASK_WIDTH,BM_MASK_SHADOW_HEIGHT,BM_MASK_WIDTH,g->player.x,
     (int16_t)(g->player.y+g->player.altitude),8,5);
 }
 static uint8_t low_flight_crash(BmGame *g){
@@ -392,11 +352,7 @@ static void begin_flight_crash(BmGame *g,uint8_t reason,uint8_t lift){
 }
 #if BM_ATARI_FLIGHT
 static const uint8_t *player_pixels(const BmGame *g){
-  if(g->player.bank<0)return (g->tick&2u)?bm_asset_bank_left_frame_0:
-                                             bm_asset_bank_left_frame_1;
-  if(g->player.bank>0)return (g->tick&2u)?bm_asset_bank_right_frame_0:
-                                            bm_asset_bank_right_frame_1;
-  return (g->tick&2u)?bm_asset_plane_frame_0:bm_asset_plane_frame_1;
+  return bm_mask_player(g->player.bank,(uint8_t)((g->tick&2u)!=0u));
 }
 static uint8_t shot_hits_player(const BmGame *g,int sx,int sy){
   const uint8_t *pixels=player_pixels(g);int x,y;
@@ -485,7 +441,8 @@ static uint8_t enemy_fighter_hits_player(const BmGame *g){
   if((uint8_t)(w->enemy_fighter_shadow_y-w->enemy_fighter_y-depth)>=12u)
     return 0u;
   player=player_pixels(g);
-  fighter=enemy_p2_mask(w,&fighter_height,&p2_value);
+  fighter=bm_mask_enemy_fighter(w->enemy_fighter_forward,w->enemy_fighter_turn,
+                                &fighter_height,&p2_value);
   fx=bm_pm_x(w->enemy_fighter_x);
   fy=bm_pm_y(w->enemy_fighter_y);
   for(y=0;y<10;++y)for(x=0;x<16;++x){
@@ -502,36 +459,23 @@ static uint8_t ship_hits_player(const BmGame *g){
   int x,y,sx=bm_pm_x(w->ship_x),sy=bm_pm_y((int)w->ship_y-11);
   int shadow_x=g->player.x-8,shadow_y=g->player.y-5+g->player.altitude;
   if(!w->ship_active||w->ship_destroyed||g->player.altitude>=20)return 0u;
-  for(y=0;y<BM_ASSET_SHADOW_HEIGHT;++y)for(x=0;x<16;++x){
-    int px,py;
+  for(y=0;y<BM_MASK_SHADOW_HEIGHT;++y)for(x=0;x<BM_MASK_WIDTH;++x){
     if(!bm_game_shadow_pixels(g)[y*16+x])continue;
-    px=shadow_x+x-sx;py=shadow_y+y-sy;
-    if(px<0||px>=16)continue;
-    if((py>=0&&py<BM_ASSET_SHIP_LAYER_0_HEIGHT&&bm_asset_ship_layer_0[py*16+px])||
-       (py>=2&&py<2+BM_ASSET_SHIP_LAYER_1_HEIGHT&&
-        bm_asset_ship_layer_1[(py-2)*16+px]))return 1u;
+    if(bm_mask_ship(shadow_x+x-sx,shadow_y+y-sy))return 1u;
   }
   return 0u;
 }
 #endif
 static uint8_t player_runway_collision(const BmGame *g){
-  const uint8_t *pixels;
-  if(g->player.bank<0)pixels=(g->tick&2u)?bm_asset_bank_left_frame_0:
-                                            bm_asset_bank_left_frame_1;
-  else if(g->player.bank>0)pixels=(g->tick&2u)?bm_asset_bank_right_frame_0:
-                                                 bm_asset_bank_right_frame_1;
-  else pixels=(g->tick&2u)?bm_asset_plane_frame_0:bm_asset_plane_frame_1;
-  return bm_world_runway_mask_collision(&g->classic_world,pixels,16u,10u,16u,
+  const uint8_t *pixels=bm_mask_player(g->player.bank,(uint8_t)((g->tick&2u)!=0u));
+  return bm_world_runway_mask_collision(&g->classic_world,pixels,BM_MASK_WIDTH,
+                                         BM_MASK_PLANE_HEIGHT,BM_MASK_WIDTH,
                                          g->player.x,(int16_t)(g->player.y+2),8,5);
 }
 static uint8_t player_playfield_collision(const BmGame *g){
-  const uint8_t *pixels;
-  if(g->player.bank<0)pixels=(g->tick&2u)?bm_asset_bank_left_frame_0:
-                                            bm_asset_bank_left_frame_1;
-  else if(g->player.bank>0)pixels=(g->tick&2u)?bm_asset_bank_right_frame_0:
-                                                 bm_asset_bank_right_frame_1;
-  else pixels=(g->tick&2u)?bm_asset_plane_frame_0:bm_asset_plane_frame_1;
-  return bm_world_playfield_mask_collision(&g->classic_world,pixels,16u,10u,16u,
+  const uint8_t *pixels=bm_mask_player(g->player.bank,(uint8_t)((g->tick&2u)!=0u));
+  return bm_world_playfield_mask_collision(&g->classic_world,pixels,BM_MASK_WIDTH,
+                                            BM_MASK_PLANE_HEIGHT,BM_MASK_WIDTH,
                                             g->player.x,g->player.y,8,5);
 }
 #if BM_ATARI_FLIGHT
@@ -572,7 +516,7 @@ static uint8_t capital_collision(const BmGame *g){
   int r,c,x0=g->player.x-8,y0=g->player.y+g->player.altitude-5;
   if(w->world_mode!=BM_WORLD_CITY||(w->area_type!=6u&&w->area_type!=7u)||
      !w->capital_y||g->player.altitude>=25||w->shadow_hidden)return 0u;
-  for(r=0;r<BM_ASSET_SHADOW_HEIGHT;++r)for(c=0;c<16;++c)
+  for(r=0;r<BM_MASK_SHADOW_HEIGHT;++r)for(c=0;c<BM_MASK_WIDTH;++c)
     if(bm_game_shadow_pixels(g)[r*16+c]&&bm_world_capital_covers(w,x0+c,y0+r))
       return 1u;
   return 0u;
