@@ -99,6 +99,7 @@ Add an option to build a variant:
 | `DEBUG_HUD=1` | `bluemax-apollo-debug` | developer HUD instead of the status line |
 | `CAPITAL_TEST=1` | `bluemax-apollo-capital-test1` | test aid: start near the capital |
 | `CAPITAL_TEST=2` | `bluemax-apollo-capital-test2` | as above, two capital targets already destroyed |
+| `RENDERER=scaled` | `bluemax-apollo-scaled` | the classic picture at 640x400 in 16-bit colour (display path test) |
 | `SOUND_TEST=1` | `bluemax-apollo-sound-test` | POKEY test tones; audio diagnostics on exit |
 
 Options can be combined, for example
@@ -134,6 +135,7 @@ make test-flight                # Atari flight model
 make test-takeoff               # game flow: takeoff, landing, service, capital, ...
 make test-scroll                # scroll timing
 make test-pokey                 # POKEY emulation, sound routines and tune
+make test-render                # renderers (classic, scaled)
 ```
 
 `make headless` runs the game without a window and prints framebuffer
@@ -144,7 +146,8 @@ checksums.
 ```text
 include/            core interfaces (game, world, flight, POKEY, sound, platform)
 src/core/           portable game code: game.c, world.c, flight.c, collision.c,
-                    render.c (classic renderer), renderer.c, sprite.c, tile.c,
+                    render.c (classic renderer), render_scaled.c, renderer.c,
+                    sprite.c, tile.c,
                     pokey.c, sound.c
 src/main.c          main loop
 platform/apollo/    SAGA video, audio, input and the AMMX blitter

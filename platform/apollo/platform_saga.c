@@ -21,9 +21,26 @@ enum {
     SAGA_CHUNKY_COLOUR=0x00dff388u, INTREQR=0x00dff01eu,
     INTREQ=0x00dff09cu, JOY1DAT=0x00dff00cu, POTINP=0x00dff016u,
     CIAA_PRA=0x00bfe001u, CIAA_SDR=0x00bfec01u,
-    SAGA_MODE_320X200_CLUT8=0x0101u,
-    FRAME_BYTES=BM_SCREEN_WIDTH*BM_SCREEN_HEIGHT
+    /* Triple buffering: one buffer shown, one queued for the next vblank,
+       one to draw into.  Sized for the largest supported frame. */
+    VIDEO_BUFFERS=3, NO_BUFFER=255, MAX_FRAME_BYTES=640*400*2
 };
+
+/* SAGA display mode word ($DFF1F4): resolution << 8 | pixel format (see
+   ApolloLib: 320x200 = $01, 640x400 = $04; CLUT8 = $01, R5G6B5 = $02,
+   A8R8G8B8 = $05). */
+static uint16_t saga_mode_for(const BmFrameFormat *f){
+    uint16_t resolution=0u,format=0u;
+    if(f->width==320u&&f->height==200u)resolution=0x01u;
+    else if(f->width==640u&&f->height==400u)resolution=0x04u;
+    if(f->pixel==BM_PIXEL_CLUT8)format=0x01u;
+    else if(f->pixel==BM_PIXEL_RGB565)format=0x02u;
+    else if(f->pixel==BM_PIXEL_ARGB32)format=0x05u;
+    return resolution&&format?(uint16_t)(resolution<<8|format):0u;
+}
+static uint32_t frame_bytes(const BmFrameFormat *f){
+    return (uint32_t)f->width*f->height*(f->pixel==BM_PIXEL_CLUT8?1u:f->pixel==BM_PIXEL_RGB565?2u:4u);
+}
 
 /* SAGA audio channel 0 ($DFF400 + 16*n, see ApolloLib): pointer, length in
    64-bit units, volume L<<8|R, mode (bit 0 16-bit, bit 1 one-shot, bit 2
@@ -59,11 +76,13 @@ static uint64_t eclock64(void){
 }
 
 typedef struct {
-    uint8_t storage[2][FRAME_BYTES+7];
-    uint8_t *video[2];
+    uint8_t storage[VIDEO_BUFFERS][MAX_FRAME_BYTES+63];
+    uint8_t *video[VIDEO_BUFFERS];
+    BmFrameFormat format;
+    uint32_t bytes;
+    uint8_t shown,queued,drawing;
     uint32_t palette[BM_PALETTE_SIZE],uploaded_palette[BM_PALETTE_SIZE],saved_pointer;
     uint16_t saved_mode,saved_modulo;
-    uint8_t active,pending;
     uint32_t vblank_seen;
     int16_t audio_storage[2*AUDIO_RING+16];
     int16_t *ring,mono[AUDIO_CHUNK],extra[AUDIO_CHUNK];
@@ -80,11 +99,7 @@ typedef struct {
 static SagaState saga;
 static void timer_open(SagaState *s);
 
-static uint8_t *align64bit(uint8_t *p){uintptr_t v=(uintptr_t)p;return(uint8_t*)((v+7u)&~(uintptr_t)7u);}
-
-static void copy_frame_for_saga(uint8_t *destination,const uint8_t *source){
-    bm_ammx_copy8(destination,source,FRAME_BYTES);
-}
+static uint8_t *align64(uint8_t *p){uintptr_t v=(uintptr_t)p;return(uint8_t*)((v+63u)&~(uintptr_t)63u);}
 
 static void remember_palette(const BmFramebuffer *fb){
     unsigned i;
@@ -102,12 +117,9 @@ static void upload_changed_palette(void){
 }
 
 static int saga_open(BmPlatform *p,const BmFrame *frame){
-    const BmFramebuffer *fb=frame->indexed;
     unsigned i;int ammx_result;
-    /* The SAGA backend shows the classic 320x200 CLUT8 frame (T35b adds
-       the larger direct-colour modes). */
-    if(frame->format.pixel!=BM_PIXEL_CLUT8||frame->format.width!=BM_SCREEN_WIDTH||
-       frame->format.height!=BM_SCREEN_HEIGHT||!fb){
+    uint16_t mode=saga_mode_for(&frame->format);
+    if(!mode||frame_bytes(&frame->format)>MAX_FRAME_BYTES){
         printf("Blue Max: display format %ux%u/%d not supported\n",
                (unsigned)frame->format.width,(unsigned)frame->format.height,
                (int)frame->format.pixel);
@@ -119,25 +131,24 @@ static int saga_open(BmPlatform *p,const BmFrame *frame){
     bm_sprite_set_blitter(bm_sprite_blit_ammx);
     memset(&saga,0,sizeof(saga));
     timer_open(&saga);
-    saga.video[0]=align64bit(saga.storage[0]);saga.video[1]=align64bit(saga.storage[1]);
-    if(((uintptr_t)saga.video[0]&7u)||((uintptr_t)saga.video[1]&7u)){
-        printf("Blue Max: SAGA framebuffer 64-bit alignment failed\n");return -1;
+    saga.format=frame->format;saga.bytes=frame_bytes(&frame->format);
+    for(i=0;i<VIDEO_BUFFERS;++i){
+        saga.video[i]=align64(saga.storage[i]);memset(saga.video[i],0,saga.bytes);
     }
+    saga.shown=0u;saga.queued=NO_BUFFER;saga.drawing=1u;
     vblank_interrupt.is_Node.ln_Type=NT_INTERRUPT;vblank_interrupt.is_Node.ln_Pri=0;
     vblank_interrupt.is_Node.ln_Name=(char*)"Blue Max vblank";
     vblank_interrupt.is_Data=0;vblank_interrupt.is_Code=(void(*)())bm_vblank_server;
     AddIntServer(INTB_VERTB,&vblank_interrupt);saga.vblank_seen=bm_vblank_count;
-    copy_frame_for_saga(saga.video[0],fb->pixels);
-    copy_frame_for_saga(saga.video[1],fb->pixels);
-    remember_palette(fb);
+    if(frame->indexed)remember_palette(frame->indexed);
     for(i=0;i<BM_PALETTE_SIZE;++i)saga.uploaded_palette[i]=0xffffffffu;
     saga.saved_pointer=REG32(SAGA_POINTER_READ);saga.saved_mode=REG16(SAGA_MODE_READ);
     saga.saved_modulo=REG16(SAGA_MODULO_READ);
     /* Match ApolloShow: modulo and mode establish the fetch geometry before
        the display pointer is made live. */
-    REG16(SAGA_MODULO_WRITE)=0;REG16(SAGA_MODE_WRITE)=SAGA_MODE_320X200_CLUT8;
-    upload_changed_palette();
-    REG32(SAGA_POINTER_WRITE)=(uint32_t)(uintptr_t)saga.video[0];p->userdata=&saga;return 0;
+    REG16(SAGA_MODULO_WRITE)=0;REG16(SAGA_MODE_WRITE)=mode;
+    if(saga.format.pixel==BM_PIXEL_CLUT8)upload_changed_palette();
+    REG32(SAGA_POINTER_WRITE)=(uint32_t)(uintptr_t)saga.video[saga.shown];p->userdata=&saga;return 0;
 }
 
 /* Keyboard: the OS keyboard handler acknowledges every byte, but CIA-A SDR
@@ -237,10 +248,25 @@ static void audio_write(SagaState *s){
     s->render_ticks+=(uint32_t)(eclock64()-now);
 }
 
+/* The buffer that is neither shown nor queued. */
+static void saga_acquire(BmPlatform *p,BmFrame *frame){
+    SagaState *s=(SagaState*)p->userdata;uint8_t i;
+    for(i=0;i<VIDEO_BUFFERS;++i)if(i!=s->shown&&i!=s->queued)break;
+    s->drawing=i;
+    if(frame->format.pixel!=BM_PIXEL_CLUT8){
+        frame->pixels=s->video[i];
+        frame->stride=(uint32_t)frame->format.width*(frame->format.pixel==BM_PIXEL_RGB565?2u:4u);
+    }
+}
+/* The classic frame is drawn in system memory and copied (AMMX); a direct
+   frame is already in the buffer.  Either is shown at the next vblank. */
 static void saga_present(BmPlatform *p,const BmFrame *frame){
-    const BmFramebuffer *fb=frame->indexed;
-    SagaState *s=(SagaState*)p->userdata;s->pending=(uint8_t)(s->active^1u);
-    copy_frame_for_saga(s->video[s->pending],fb->pixels);remember_palette(fb);
+    SagaState *s=(SagaState*)p->userdata;
+    if(frame->format.pixel==BM_PIXEL_CLUT8){
+        bm_ammx_copy8(s->video[s->drawing],frame->indexed->pixels,s->bytes);
+        remember_palette(frame->indexed);
+    }
+    s->queued=s->drawing;
 }
 static unsigned saga_wait_vblank(BmPlatform *p){
     SagaState *s=(SagaState*)p->userdata;uint32_t passed;
@@ -254,8 +280,11 @@ static unsigned saga_wait_vblank(BmPlatform *p){
     passed=bm_vblank_count-s->vblank_seen;s->vblank_seen+=passed;++s->frames;
     if(passed>1u)s->missed+=passed-1u;
     if(s->audio_on)s->work_start=eclock64();
-    upload_changed_palette();
-    REG32(SAGA_POINTER_WRITE)=(uint32_t)(uintptr_t)s->video[s->pending];s->active=s->pending;
+    if(s->queued!=NO_BUFFER){
+        if(s->format.pixel==BM_PIXEL_CLUT8)upload_changed_palette();
+        REG32(SAGA_POINTER_WRITE)=(uint32_t)(uintptr_t)s->video[s->queued];
+        s->shown=s->queued;s->queued=NO_BUFFER;
+    }
 #if BM_TICK_RATE == 50
     /* TICK_RATE=50: the updates follow the E-clock, not the display; on a
        60 Hz screen every sixth vblank has none, at most two per vblank. */
@@ -303,6 +332,6 @@ static void saga_close(BmPlatform *p){
     bm_sprite_set_blitter(0);
 }
 BmPlatform bm_platform_create(void){
-    BmPlatform p;p.userdata=0;p.open=saga_open;p.poll_input=saga_poll_input;p.present=saga_present;
+    BmPlatform p;p.userdata=0;p.open=saga_open;p.poll_input=saga_poll_input;p.acquire=saga_acquire;p.present=saga_present;
     p.audio_tick=saga_audio_tick;p.wait_vblank=saga_wait_vblank;p.close=saga_close;return p;
 }

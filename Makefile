@@ -31,10 +31,11 @@ ENHANCED_SOUND ?= 0
 # E-clock (on a 60 Hz screen every sixth vblank has none) and the PAL POKEY
 # clock.  60 = one update per vblank, as the NTSC original.
 TICK_RATE ?= 60
-# The renderer: classic = the Atari picture (320x200, 256 colours).
+# The renderer: classic = the Atari picture (320x200, 256 colours);
+# scaled = the same picture at 640x400 in 16-bit colour (display test).
 RENDERER ?= classic
-ifneq ($(RENDERER),classic)
-$(error RENDERER=$(RENDERER) is not available (classic))
+ifeq ($(filter classic scaled,$(RENDERER)),)
+$(error RENDERER=$(RENDERER) is not available (classic, scaled))
 endif
 BUILD_VARIANT := $(if $(filter 0,$(CLASSIC_TEST_PAGE)),-placeholder,)
 BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter 0,$(ATARI_SCROLL)),-preview-scroll,)
@@ -44,6 +45,7 @@ BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter 1,$(DEBUG_HUD)),-debug,)
 BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter 1,$(SOUND_TEST)),-sound-test,)
 BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter 1,$(ENHANCED_SOUND)),-enhanced-sound,)
 BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter 50,$(TICK_RATE)),-50hz,)
+BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter scaled,$(RENDERER)),-scaled,)
 TARGET := bluemax-apollo$(BUILD_VARIANT)
 BUILD := build/apollo$(BUILD_VARIANT)
 ACP ?= $(CURDIR)/../ApolloExplorer/acp/acp
@@ -62,10 +64,14 @@ HOST_CFLAGS += -DBM_CAPITAL_TEST=$(CAPITAL_TEST)
 HOST_CFLAGS += -DBM_DEBUG_HUD=$(DEBUG_HUD)
 HOST_CFLAGS += -DBM_ENHANCED_SOUND=$(ENHANCED_SOUND)
 HOST_CFLAGS += -DBM_TICK_RATE=$(TICK_RATE)
+HOST_CFLAGS += -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0)
+CFLAGS += -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0)
 CFLAGS += -DBM_TICK_RATE=$(TICK_RATE)
+CFLAGS += -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0)
 CFLAGS += -DBM_SOUND_TEST=$(SOUND_TEST)
 CFLAGS += -DBM_ENHANCED_SOUND=$(ENHANCED_SOUND)
 CFLAGS += -DBM_TICK_RATE=$(TICK_RATE)
+CFLAGS += -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0)
 CFLAGS := -std=c99 -O2 -Wall -Wextra -Wpedantic -Werror -m68080 -m68881 -ffast-math -fomit-frame-pointer -DREGPARM=4 -DBM_APOLLO_68080=1 -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE) -noixemul -Iinclude -I$(ASSET_BUILD)
 CFLAGS += -MMD -MP
 ASFLAGS := -Fhunk -m68080 -m68881 -opt-speed -kick1hunks
@@ -76,8 +82,9 @@ CFLAGS += -DBM_DEBUG_HUD=$(DEBUG_HUD)
 CFLAGS += -DBM_SOUND_TEST=$(SOUND_TEST)
 CFLAGS += -DBM_ENHANCED_SOUND=$(ENHANCED_SOUND)
 CFLAGS += -DBM_TICK_RATE=$(TICK_RATE)
+CFLAGS += -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0)
 LDFLAGS := -m68080 -m68881 -noixemul
-C_SOURCES := src/main.c src/core/renderer.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/apollo/platform_saga.c platform/apollo/ammx_selftest.c platform/apollo/sprite_ammx.c
+C_SOURCES := src/main.c src/core/renderer.c src/core/render_scaled.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/apollo/platform_saga.c platform/apollo/ammx_selftest.c platform/apollo/sprite_ammx.c
 S_SOURCES := platform/apollo/ammx_blit.s
 OBJECTS := $(patsubst %.c,$(BUILD)/%.o,$(C_SOURCES)) $(patsubst %.s,$(BUILD)/%.o,$(S_SOURCES))
 DEPENDENCIES := $(patsubst %.c,$(BUILD)/%.d,$(C_SOURCES))
@@ -88,6 +95,11 @@ test-pokey: $(ASSET_HEADER)
 	mkdir -p build/pokey-test
 	$(HOST_CC) -std=c99 -O2 -Wall -Wextra -Wpedantic -Werror -Iinclude -I$(ASSET_BUILD) tests/test_pokey.c src/core/pokey.c src/core/sound.c -o build/pokey-test/test
 	build/pokey-test/test
+.PHONY: test-render
+test-render: $(ASSET_HEADER)
+	mkdir -p build/render-test
+	$(HOST_CC) $(filter-out -DBM_ATARI_FLIGHT=$(ATARI_FLIGHT) -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE) -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0),$(HOST_CFLAGS)) -DBM_ATARI_FLIGHT=1 -DBM_CLASSIC_TEST_PAGE=1 -DBM_RENDERER_SCALED=0 tests/test_render.c src/core/renderer.c src/core/render_scaled.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c -o build/render-test/test
+	build/render-test/test
 .PHONY: test-scroll
 test-scroll: $(ASSET_HEADER)
 	mkdir -p build/scroll-test
@@ -120,9 +132,9 @@ $(ASSET_HEADER): tools/extract_chbas.py tools/music_data.py $(CHBAS) $(CHBAS_BIN
 $(HOST_BUILD)/bluemax-test: tests/test_game.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c include/bm_flight.h include/bm_game.h include/bm_pokey.h include/bm_sound.h include/bm_platform.h include/bm_sprite.h include/bm_tile.h include/bm_world.h include/bm_collision.h include/bm_frame.h include/bm_renderer.h $(ASSET_HEADER)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(filter-out -DBM_ATARI_FLIGHT=$(ATARI_FLIGHT),$(HOST_CFLAGS)) -DBM_ATARI_FLIGHT=0 tests/test_game.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c -o $@
-$(HOST_BUILD)/bluemax-headless: src/main.c src/core/renderer.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/headless/platform_headless.c include/bm_flight.h include/bm_game.h include/bm_pokey.h include/bm_sound.h include/bm_platform.h include/bm_sprite.h include/bm_tile.h include/bm_world.h include/bm_collision.h include/bm_frame.h include/bm_renderer.h $(ASSET_HEADER)
+$(HOST_BUILD)/bluemax-headless: src/main.c src/core/renderer.c src/core/render_scaled.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/headless/platform_headless.c include/bm_flight.h include/bm_game.h include/bm_pokey.h include/bm_sound.h include/bm_platform.h include/bm_sprite.h include/bm_tile.h include/bm_world.h include/bm_collision.h include/bm_frame.h include/bm_renderer.h $(ASSET_HEADER)
 	mkdir -p $(dir $@)
-	$(HOST_CC) $(HOST_CFLAGS) src/main.c src/core/renderer.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/headless/platform_headless.c -o $@
+	$(HOST_CC) $(HOST_CFLAGS) src/main.c src/core/renderer.c src/core/render_scaled.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/headless/platform_headless.c -o $@
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 $(BUILD)/%.o: %.c Makefile

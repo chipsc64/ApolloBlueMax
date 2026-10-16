@@ -12,6 +12,8 @@ typedef struct {
 } BmRenderer;
 /* The Atari picture: 320x200, CLUT8 (render.c). */
 extern const BmRenderer bm_renderer_classic;
+/* The classic picture at 640x400 RGB565, 2x2 per pixel (render_scaled.c). */
+extern const BmRenderer bm_renderer_scaled;
 /* The renderer this build uses (Makefile RENDERER=...). */
 const BmRenderer *bm_renderer_selected(void);
 #endif

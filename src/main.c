@@ -43,11 +43,11 @@ int main(void) {
   unsigned due=1u;
   bm_game_boot(&game,0x424d4158u);
   frame.format=renderer->format;frame.indexed=&game.framebuffer;
-  renderer->render(&game,&frame);
   if(!platform.open || platform.open(&platform,&frame)!=0) return 1;
   while(!input.quit) {
     platform.poll_input(&platform,&input);
     while(due--) bm_game_tick(&game,&input);
+    if(platform.acquire) platform.acquire(&platform,&frame);
     renderer->render(&game,&frame);
     platform.present(&platform,&frame);
 #if BM_SOUND_TEST

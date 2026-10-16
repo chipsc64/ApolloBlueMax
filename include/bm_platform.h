@@ -16,6 +16,10 @@ struct BmPlatform {
   /* open picks the display mode for the renderer's frame format. */
   int (*open)(BmPlatform *, const struct BmFrame *);
   void (*poll_input)(BmPlatform *, BmInput *);
+  /* acquire hands out the buffer to draw the next frame into (direct
+     colour frames are drawn straight into display memory); present queues
+     it for the next vblank. */
+  void (*acquire)(BmPlatform *, struct BmFrame *);
   void (*present)(BmPlatform *, const struct BmFrame *);
   /* The POKEYs to mix: one, or six with ENHANCED_SOUND. */
   void (*audio_tick)(BmPlatform *, BmPokey *const *, unsigned);

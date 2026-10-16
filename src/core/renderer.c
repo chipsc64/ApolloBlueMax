@@ -1,3 +1,8 @@
 #include "bm_renderer.h"
-/* RENDERER=classic (the only one so far; T35c adds an upscaled one). */
-const BmRenderer *bm_renderer_selected(void){return &bm_renderer_classic;}
+#ifndef BM_RENDERER_SCALED
+#define BM_RENDERER_SCALED 0
+#endif
+/* RENDERER=classic or scaled (Makefile). */
+const BmRenderer *bm_renderer_selected(void){
+  return BM_RENDERER_SCALED?&bm_renderer_scaled:&bm_renderer_classic;
+}
