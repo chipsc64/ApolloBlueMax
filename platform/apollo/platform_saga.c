@@ -1,6 +1,7 @@
 #include "bm_platform.h"
 #include "bm_frame.h"
 #include "bm_profile.h"
+#include "bm_renderer.h"
 #include "bm_ammx.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -138,6 +139,9 @@ static int saga_open(BmPlatform *p,const BmFrame *frame){
     if(ammx_result!=0){printf("Blue Max: AMMX self-test failed (%d)\n",ammx_result);return -1;}
     printf("Blue Max: AMMX self-test passed\n");
     bm_sprite_set_blitter(bm_sprite_blit_ammx);
+    /* The 640x400 conversion: AMMX only when it matches the C reference. */
+    if(bm_ammx_row_selftest()==0)bm_ammx_install_row_converters();
+    else printf("Blue Max: AMMX row conversion off, using C\n");
     memset(&saga,0,sizeof(saga));
     timer_open(&saga);
 #if BM_SOUND_TEST
@@ -380,6 +384,7 @@ static void saga_close(BmPlatform *p){
     REG16(SAGA_MODULO_WRITE)=s->saved_modulo;
     REG32(SAGA_POINTER_WRITE)=s->saved_pointer;REG16(SAGA_MODE_WRITE)=s->saved_mode;
     bm_sprite_set_blitter(0);
+    bm_render_set_converters(0,0);
 }
 BmPlatform bm_platform_create(void){
     BmPlatform p;p.userdata=0;p.open=saga_open;p.poll_input=saga_poll_input;p.acquire=saga_acquire;p.present=saga_present;

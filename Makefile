@@ -91,7 +91,7 @@ CFLAGS += -DBM_TICK_RATE=$(TICK_RATE)
 CFLAGS += -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0)
 CFLAGS += -DBM_RENDERER_HD=$(if $(filter hd,$(RENDERER)),1,0)
 LDFLAGS := -m68080 -m68881 -noixemul
-C_SOURCES := src/main.c src/core/renderer.c src/core/render_scaled.c src/core/render_hd.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/apollo/platform_saga.c platform/apollo/ammx_selftest.c platform/apollo/sprite_ammx.c
+C_SOURCES := src/main.c src/core/renderer.c src/core/render_scaled.c src/core/render_hd.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/apollo/platform_saga.c platform/apollo/ammx_selftest.c platform/apollo/sprite_ammx.c platform/apollo/row_selftest.c
 S_SOURCES := platform/apollo/ammx_blit.s
 OBJECTS := $(patsubst %.c,$(BUILD)/%.o,$(C_SOURCES)) $(patsubst %.s,$(BUILD)/%.o,$(S_SOURCES))
 DEPENDENCIES := $(patsubst %.c,$(BUILD)/%.d,$(C_SOURCES))
