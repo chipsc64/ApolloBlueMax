@@ -89,7 +89,7 @@ def rgb565(r, g, b):
 
 
 # BmSpriteKind order (bm_renderer.h) and the number of variants each.
-SPRITE_KINDS = [('player', 6), ('shadow', 2), ('crash', 2), ('shot', 1),
+SPRITE_KINDS = [('player', 6), ('shadow', 3), ('crash', 2), ('shot', 1),
                 ('bomb', 2), ('explosion', 2), ('ship', 2), ('vehicle', 8),
                 ('enemy', 32), ('enemy_shadow', 2), ('enemy_shot', 1),
                 ('gunsight', 1), ('gun_shot', 2), ('capital', 1)]

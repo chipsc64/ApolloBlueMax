@@ -135,14 +135,14 @@ art/sprites/KIND.png    every variant of an object
 | KIND | Variants (V) |
 |---|---|
 | `player` | 0/1 level, 2/3 banking left, 4/5 banking right (even/odd: propeller frame) |
-| `shadow` | 0 normal, 1 thin far shadow |
+| `shadow` | 0 normal, 1 thin far shadow, 2 banking |
 | `crash` | 0/1 the two halves of the explosion |
 | `shot`, `enemy_shot`, `gunsight`, `capital` | 0 |
 | `bomb` | 0/1 the falling bomb's two phases |
 | `explosion` | 0 on land, 1 water splash |
-| `ship` | 0 afloat, 1 destroyed |
-| `vehicle` | bits: 1 truck, 2 driving left, 4 destroyed |
-| `enemy` | bits: 1 coming forward, 2/4 turning left/right, 8 wreck, 16 crash colour |
+| `ship` | 0 afloat, 1 destroyed (placed one Atari line higher) |
+| `vehicle` | bits: 1 truck, 2 driving left, 4 destroyed (one line higher) |
+| `enemy` | bits: 1 coming forward, 2/4 turning left/right, 8 wreck (one line higher), 16 crash colour |
 | `enemy_shadow` | 0 behind, 1 forward fighter's shadow layer |
 | `gun_shot` | 0 shell, 1 shell burst |
 
@@ -153,8 +153,10 @@ grey pixels (R=G=B) take the object's Atari colour, scaled by their grey
 level, so bonus targets keep their colour. Collisions always use the
 original shapes.
 
-The textures and the player's aircraft in the repository are generated
-examples (`tools/make_example_art.py`); replace them with real artwork. PNGs must be
+The textures and sprites in the repository are generated examples
+(`tools/make_example_art.py`, derived from the Atari shapes); replace them
+with real artwork. Shots, the bomb and the capital target have no example
+and stay as in the original. PNGs must be
 8-bit RGB, RGBA, grey or palette images. `tools/art_assets.py` converts
 them during the build, so no extra Python packages are needed.
 

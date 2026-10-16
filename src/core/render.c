@@ -631,8 +631,8 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
        lines lower; C1 starts at 15, above the playfield. */
     int ship_x=bm_pm_x(g->classic_world.ship_x);
     int ship_y=bm_pm_y((int)g->classic_world.ship_y-11);
-    if(sprite(BM_SPRITE_SHIP,g->classic_world.ship_destroyed?1u:0u,ship_x,ship_y,
-              p2_colour(g),0u)){
+    if(sprite(BM_SPRITE_SHIP,g->classic_world.ship_destroyed?1u:0u,ship_x,
+              g->classic_world.ship_destroyed?ship_y-1:ship_y,p2_colour(g),0u)){
       if(g->classic_world.ship_destroyed)
         /* Z6 writes XSHPIM to P2 rows C1-12..C1. */
         bm_sprite_blit_colour(f,&destroyed_ship,ship_x,ship_y-1,31u);
@@ -658,7 +658,8 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
     }
     if(sprite(BM_SPRITE_VEHICLE,(g->classic_world.river_vehicle_truck?1u:0u)|
               (g->classic_world.river_car_left?2u:0u)|
-              (g->classic_world.river_car_destroyed?4u:0u),car_x,car_y,p2_colour(g),0u)){
+              (g->classic_world.river_car_destroyed?4u:0u),car_x,
+              g->classic_world.river_car_destroyed?car_y-1:car_y,p2_colour(g),0u)){
       if(g->classic_world.river_car_destroyed){
         static const BmSprite wreck={bm_asset_crash,16,10,16,0,0};
         bm_sprite_blit_colour(f,&wreck,car_x,car_y-1,32u);
@@ -702,7 +703,7 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
       static const BmSprite wreck={
         bm_asset_explosion,16,BM_ASSET_EXPLOSION_HEIGHT,16,0,0
       };
-      if(sprite(BM_SPRITE_ENEMY,8u,fighter_x,fighter_y,p2_colour(g),0u))
+      if(sprite(BM_SPRITE_ENEMY,8u,fighter_x,fighter_y-1,p2_colour(g),0u))
         bm_sprite_blit_colour(f,&wreck,fighter_x,fighter_y-1,29u);
     }else if(g->mode==BM_STATE_CRASHING&&g->flight_crash_colp02){
       /* CRSH/SK: with $655=0 the enemy P2 takes the crash colour. */
@@ -769,7 +770,8 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
      g->mode!=BM_STATE_RANKING&&g->mode!=BM_STATE_GAME_OVER&&
      !(g->flight_service_phase&&g->player.altitude<=3)&&
      !g->classic_world.shadow_hidden&&         /* PRIOR: SHBNE */
-     sprite(BM_SPRITE_SHADOW,g->shadow_far?1u:0u,p-8,q+g->player.altitude-5,0u,
+     sprite(BM_SPRITE_SHADOW,g->shadow_far?1u:(g->player.bank?2u:0u),
+            p-8,q+g->player.altitude-5,0u,
 #if BM_CLASSIC_TEST_PAGE
             g->classic_world.gprior==4u
 #else

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Write the example art: textures in art/materials/ (grass $C4, water $94,
 16x16 and seamless, around the original Atari colours) and the player's
-aircraft in art/sprites/ (player_0..5: level/left/right x propeller frame),
-derived from the Atari shapes in the generated asset header at twice the
-size with a highlight, a shade and an outline.  Replace them with real
+aircraft and the other objects in art/sprites/, derived from the Atari
+shapes in the generated asset header at twice the size with a highlight,
+a shade and an outline.  P2 parts (the object's colour) are pure grey so
+that they take the Atari colour; P3 parts are dark; explosions fiery.  Replace them with real
 artwork; this script only exists so the examples can be reproduced."""
 import math
 import os
@@ -89,6 +90,74 @@ def hd_plane(shape):
     return out, w, h
 
 
+def bits_to_rows(rows):
+    """Eight-bit rows (one bit = one Atari colour clock = two pixels)."""
+    return [[9 if row & (0x80 >> (c // 2)) else 0 for c in range(16)] for row in rows]
+
+
+def shadow_rows(shape, variant):
+    """SHDW, with SHCOL (far: rows 0/7 off, 1/6 $44/$42) or TURN banking
+    (rows 0/7 $02/$40), as bm_game_shadow_pixels."""
+    rows = []
+    for r in range(8):
+        bits = 0
+        for c in range(8):
+            if shape[r][c * 2]:
+                bits |= 0x80 >> c
+        rows.append(bits)
+    if variant == 1:
+        rows[0] = rows[7] = 0
+        rows[1], rows[6] = 0x44, 0x42
+    elif variant == 2:
+        rows[0], rows[7] = 0x02, 0x40
+    return bits_to_rows(rows)
+
+
+def compose(layers, outline=True):
+    """layers: (shape, dy, style).  Styles: 'tint' (pure grey, lit from the
+    top), 'p3' (dark), 'fire', 'water', 'shadow'.  Later layers cover
+    earlier ones, like the Atari's P2 over P3."""
+    height = max(len(shape) + dy for shape, dy, _ in layers) * 2
+    width = 32
+    style = [[None] * width for _ in range(height)]
+    for shape, dy, kind in layers:
+        for y in range(len(shape) * 2):
+            for x in range(width):
+                if shape[y // 2][x // 2]:
+                    style[y + dy * 2][x] = kind
+    def filled(x, y):
+        return 0 <= x < width and 0 <= y < height and style[y][x] is not None
+    out = []
+    for y in range(height):
+        for x in range(width):
+            kind = style[y][x]
+            if kind is None:
+                near = any(filled(x + dx, y + dy) and style[y + dy][x + dx] != 'shadow'
+                           for dx in (-1, 0, 1) for dy in (-1, 0, 1))
+                out.append((40, 40, 48, 255) if outline and near else (0, 0, 0, 0))
+                continue
+            top, bottom = not filled(x, y - 1), not filled(x, y + 1)
+            if kind == 'tint':
+                g = 250 if top else (150 if bottom else 215)
+                out.append((g, g, g, 255))
+            elif kind == 'p3':
+                out.append((70, 70, 82, 255) if top else (44, 44, 54, 255))
+            elif kind == 'fire':
+                t = y / max(1, height - 1)
+                out.append((255, int(235 - 170 * t), int(110 - 90 * t), 255) if not bottom
+                           else (170, 40, 20, 255))
+            elif kind == 'water':
+                out.append((235, 245, 255, 255) if top else (170, 205, 230, 255))
+            else:
+                out.append((22, 26, 22, 255))
+    return out, width, height
+
+
+def write_sprite(folder, name, image):
+    pixels, w, h = image
+    write_png(os.path.join(folder, name + '.png'), pixels, w, h)
+
+
 def main(art_dir, header_path='build/assets/chbas/bm_chbas_assets.h'):
     folder = os.path.join(art_dir, 'materials')
     os.makedirs(folder, exist_ok=True)
@@ -105,6 +174,49 @@ def main(art_dir, header_path='build/assets/chbas/bm_chbas_assets.h'):
         for frame in (0, 1):
             pixels, w, h = hd_plane(atari_sprite(header, f'{base}_frame_{frame}'))
             write_png(os.path.join(sprites, f'player_{bank + frame}.png'), pixels, w, h)
+    a = lambda name: atari_sprite(header, name)
+    def split(shape, p2, p3):
+        """A composite: P2 value(s) and P3 value(s) as two layers."""
+        return ([[v if v in p2 else 0 for v in row] for row in shape],
+                [[v if v in p3 else 0 for v in row] for row in shape])
+    # The shadow: normal, far (SHCOL), banking (TURN).
+    for v in range(3):
+        write_sprite(sprites, f'shadow_{v}', compose([(shadow_rows(a('shadow'), v), 0, 'shadow')], False))
+    # The enemy fighter: P2 (value 10, or 7 in the banking frames) takes its
+    # colour, P3 (9) is dark.  Variant bits: 1 forward, 2/4 turning, 8 wreck,
+    # 16 crash colour (same look).
+    looks = {0: 'fighter_back', 1: 'fighter_forward', 2: 'bank_left_frame_1',
+             4: 'bank_right_frame_1', 3: 'fighter_left_initial', 5: 'fighter_right_initial'}
+    for look, name in looks.items():
+        p2, p3 = split(a(name), (7, 10), (9,))
+        image = compose([(p3, 0, 'p3'), (p2, 0, 'tint')])
+        write_sprite(sprites, f'enemy_{look}', image)
+        write_sprite(sprites, f'enemy_{look | 16}', image)
+    write_sprite(sprites, 'enemy', compose([(split(a('fighter_back'), (10,), (9,))[1], 0, 'p3'),
+                                           (split(a('fighter_back'), (10,), (9,))[0], 0, 'tint')]))
+    write_sprite(sprites, 'enemy_8', compose([(a('explosion'), 0, 'fire')]))
+    write_sprite(sprites, 'enemy_shadow_0', compose([(a('shadow'), 0, 'shadow')], False))
+    write_sprite(sprites, 'enemy_shadow_1', compose([(a('fighter_forward_p3'), 0, 'shadow')], False))
+    # The ship: SHPIM on P2, SHPIM1 on P3 two lines lower; the wreck XSHPIM.
+    write_sprite(sprites, 'ship_0', compose([(a('ship_layer_1'), 2, 'p3'), (a('ship_layer_0'), 0, 'tint')]))
+    write_sprite(sprites, 'ship_1', compose([(a('destroyed_ship'), 0, 'fire')]))
+    # Vehicles: body on P2, tyres on P3 one line lower; a wreck is the crash
+    # image one line higher, with the tyres two lines below its top.
+    for v in range(8):
+        kind = 'truck' if v & 1 else 'car'
+        side = 'left' if v & 2 else 'right'
+        tyres = a(f'{kind}_{side}_tyres')
+        if v & 4:
+            image = compose([(a('crash'), 0, 'fire'), (tyres, 2, 'p3')])
+        else:
+            image = compose([(tyres, 1, 'p3'), (a(f'{kind}_{side}_body'), 0, 'tint')])
+        write_sprite(sprites, f'vehicle_{v}', image)
+    # Explosions: a bomb on land and in water, and the crash halves.
+    write_sprite(sprites, 'explosion_0', compose([(a('explosion'), 0, 'fire')]))
+    write_sprite(sprites, 'explosion_1', compose([(a('explosion'), 0, 'water')]))
+    for v in range(2):
+        write_sprite(sprites, f'crash_{v}', compose([(a('explosion'), 0, 'fire')]))
+    write_sprite(sprites, 'gunsight', compose([(a('gunsight'), 0, 'tint')]))
 
 
 if __name__ == '__main__':

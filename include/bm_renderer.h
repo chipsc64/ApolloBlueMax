@@ -25,14 +25,14 @@ extern const BmRenderer bm_renderer_hd;
    are recorded but not drawn by the classic renderer. */
 typedef enum {
   BM_SPRITE_PLAYER,        /* variant: bank (0 level, 1 left, 2 right) * 2 + propeller frame */
-  BM_SPRITE_SHADOW,        /* variant: 1 = the thin far shadow (SHCOL) */
+  BM_SPRITE_SHADOW,        /* variant: 0 normal, 1 the thin far shadow (SHCOL), 2 banking (TURN) */
   BM_SPRITE_PLAYER_CRASH,  /* variant: 0 = P0 half, 1 = P1 half */
   BM_SPRITE_PLAYER_SHOT,
   BM_SPRITE_BOMB,          /* variant: the narrow end's phase */
   BM_SPRITE_BOMB_EXPLOSION,/* variant: 1 = water splash */
-  BM_SPRITE_SHIP,          /* variant: 1 = destroyed */
-  BM_SPRITE_VEHICLE,       /* variant: 1 truck, 2 moving left, 4 destroyed */
-  BM_SPRITE_ENEMY,         /* variant: 1 forward, 2/4 turn left/right, 8 wreck, 16 crash colour */
+  BM_SPRITE_SHIP,          /* variant: 1 = destroyed (one line higher) */
+  BM_SPRITE_VEHICLE,       /* variant: 1 truck, 2 moving left, 4 destroyed (one line higher) */
+  BM_SPRITE_ENEMY,         /* variant: 1 forward, 2/4 turn left/right, 8 wreck (one line higher), 16 crash colour */
   BM_SPRITE_ENEMY_SHADOW,  /* variant: 1 = PLFWD's P3 layer */
   BM_SPRITE_ENEMY_SHOT,
   BM_SPRITE_GUNSIGHT,
