@@ -190,3 +190,134 @@ uint8_t bm_sound_music_tick(BmSound *s,BmPokey *k){
   s->music_on=0u;bm_sound_stop(k);
   return 0u;
 }
+
+/* ---- Game sound events (POKEY implementation) ------------------------- */
+
+static BmPokey *group(const BmSoundOut *o,unsigned g){return o->pokey[g];}
+static BmPokey *main_pokey(const BmSoundOut *o){return o->pokey[BM_SOUND_MAIN];}
+
+void bm_sound_event_power_on(BmSound *s,const BmSoundOut *o){
+  bm_pokey_write(main_pokey(o),BM_POKEY_SKCTL,3u);
+  bm_pokey_write(main_pokey(o),BM_POKEY_AUDF1,251u);
+  bm_sound_event_takeoff_engine(s,o);
+}
+void bm_sound_event_takeoff_engine(BmSound *s,const BmSoundOut *o){       /* AFX */
+  BmPokey *k=main_pokey(o);
+  bm_pokey_write(k,BM_POKEY_AUDF1,251u);bm_pokey_write(k,BM_POKEY_AUDF3,13u);
+  s->engine=0xc1u;bm_pokey_write(k,BM_POKEY_AUDC1,0xc1u);
+}
+void bm_sound_event_quiet(const BmSoundOut *o){
+  unsigned g;for(g=0;g<BM_SOUND_GROUPS;++g)bm_sound_quiet(group(o,g));
+}
+void bm_sound_event_demo_music(BmSound *s,const BmSoundOut *o){
+  bm_sound_quiet(main_pokey(o));bm_sound_music_start(s);
+}
+void bm_sound_event_end_music(BmSound *s){bm_sound_music_start(s);}
+uint8_t bm_sound_event_vblank(BmSound *s,const BmSoundOut *o){
+  bm_sound_xsnd(s,main_pokey(o));
+  return (uint8_t)(s->music_on&&!bm_sound_music_tick(s,main_pokey(o)));
+}
+
+/* XXX limit/volume per caller (CRASH, SV, VB, R7, BMCPTL, SW/C9, $1B61). */
+static const uint8_t explosion_limit[7] ={80u,15u,50u,50u,70u,2u,0x2au};
+static const uint8_t explosion_volume[7]={0x4fu,0x48u,0x4cu,0x4cu,0x4eu,0x47u,0x4cu};
+void bm_sound_event_explosion(BmSound *s,const BmSoundOut *o,BmExplosion kind){
+  bm_sound_xxx(s,main_pokey(o),explosion_limit[kind],explosion_volume[kind]);
+}
+void bm_sound_event_flak(BmSound *s,const BmSoundOut *o){
+  if(!s->xp_count)bm_sound_event_explosion(s,o,BM_EXPLOSION_FLAK);
+}
+void bm_sound_event_crash(BmSound *s,const BmSoundOut *o){
+  unsigned g;
+  bm_sound_event_explosion(s,o,BM_EXPLOSION_CRASH);
+  bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,0u);
+  for(g=BM_SOUND_MAIN;g<=BM_SOUND_BEEP;++g)bm_pokey_write(group(o,g),BM_POKEY_AUDC4,0u);
+}
+
+void bm_sound_event_engine(BmSound *s,const BmSoundOut *o,uint8_t stick){
+  bm_sound_roar(s,main_pokey(o),stick);
+}
+void bm_sound_event_engine_dead(BmSound *s,const BmSoundOut *o){
+  bm_sound_engine_dying(s,main_pokey(o));
+}
+void bm_sound_event_engine_idle(BmSound *s,const BmSoundOut *o){         /* GROUND */
+  if(s->engine>=0xc2u){--s->engine;bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,s->engine);}
+}
+void bm_sound_event_attacker(BmSound *s,const BmSoundOut *o,uint8_t flying){ /* PBMB */
+  bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,flying?0xc3u:s->engine);
+}
+uint8_t bm_sound_event_engine_stop_step(BmSound *s,const BmSoundOut *o){  /* STOPL .2 */
+  if(s->engine==0xc0u)return 1u;
+  --s->engine;bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,s->engine);
+  return 0u;
+}
+
+void bm_sound_event_enemy_shot(BmSound *s){s->gun=0x30u;}
+void bm_sound_event_own_shot(BmSound *s){s->gun=3u;}
+void bm_sound_event_shot_end(BmSound *s){s->gun=255u;}
+void bm_sound_event_ground_gun(BmSound *s){s->ground_gun=12u;}
+void bm_sound_event_runway(BmSound *s){s->runway=0x19u;}
+
+void bm_sound_event_update(BmSound *s,const BmSoundOut *o){
+  bm_sound_gunsnd(s,group(o,BM_SOUND_GUN));
+  bm_sound_splash(s,group(o,BM_SOUND_BOMB));
+  bm_sound_ggnsnd(s,group(o,BM_SOUND_GROUND_GUN));
+  bm_sound_runsnd(s,group(o,BM_SOUND_BEEP));
+  bm_sound_cdrp(s,group(o,BM_SOUND_BOMB),main_pokey(o));
+}
+void bm_sound_event_splash_step(BmSound *s,const BmSoundOut *o){
+  bm_sound_splash(s,group(o,BM_SOUND_BOMB));
+}
+void bm_sound_event_bomb_release(BmSound *s,const BmSoundOut *o){
+  bm_sound_bomb_release(s,group(o,BM_SOUND_BOMB),main_pokey(o));
+}
+void bm_sound_event_bomb_lands(BmSound *s,const BmSoundOut *o,BmBombImpact impact){
+  BmPokey *k=group(o,BM_SOUND_BOMB);
+  if(impact==BM_BOMB_BEHIND_ROOFS){              /* Z3 .13: CDRP runs on */
+    s->drop=s->drop_last;++s->dropping;return;
+  }
+  bm_pokey_write(k,BM_POKEY_AUDC2,0u);            /* AFP */
+  if(impact==BM_BOMB_WATER)bm_sound_splash_start(s,k);
+  else bm_sound_event_explosion(s,o,BM_EXPLOSION_BOMB);
+}
+
+void bm_sound_event_low_altitude(BmSound *s,const BmSoundOut *o,BmLowAltitude state){
+  BmPokey *k=group(o,BM_SOUND_WARN);
+  if(state==BM_LOW_TONE){
+    s->splash=0u;s->low_tone=10u;
+    bm_pokey_write(k,BM_POKEY_AUDF2,10u);bm_pokey_write(k,BM_POKEY_AUDC2,0xa6u);
+  }else if(state==BM_LOW_SILENT)bm_pokey_write(k,BM_POKEY_AUDC2,0u);
+  else if(s->low_tone){s->low_tone=0u;bm_pokey_write(k,BM_POKEY_AUDC2,0u);}
+}
+void bm_sound_event_line(BmSound *s,const BmSoundOut *o,uint8_t in_line,uint8_t low){
+  BmPokey *k=group(o,BM_SOUND_WARN);
+  /* Both paths leave channel 3 to a running explosion ($644) - unless the
+     groups are separate.  LINE's AUDC2=0 then only stops LOW. */
+  uint8_t free=(uint8_t)(o->separate||!s->xp_count);
+  if(in_line){
+    if(low)bm_pokey_write(k,BM_POKEY_AUDC2,0u);
+    if(!free)return;
+    if(--s->line_timer>=235u){
+      bm_pokey_write(k,BM_POKEY_AUDF3,15u);bm_pokey_write(k,BM_POKEY_AUDC3,0xa2u);
+    }else bm_pokey_write(k,BM_POKEY_AUDC3,0u);
+    return;
+  }
+  s->line_timer=0u;
+  if(free)bm_pokey_write(k,BM_POKEY_AUDC3,0u);
+}
+void bm_sound_event_warning(BmSound *s,const BmSoundOut *o,uint8_t on){
+  BmPokey *k=group(o,BM_SOUND_WARN);
+  if(!on){bm_pokey_write(k,BM_POKEY_AUDC4,0u);return;}
+  if(!o->separate)s->gun=0u;                      /* WARN: $648=0 */
+  bm_sound_warn(s,k);
+}
+void bm_sound_event_marker(const BmSoundOut *o,uint8_t on){
+  BmPokey *k=group(o,BM_SOUND_BEEP);
+  if(!on){bm_pokey_write(k,BM_POKEY_AUDC4,0u);return;}
+  bm_pokey_write(k,BM_POKEY_AUDC4,0xa2u);bm_pokey_write(k,BM_POKEY_AUDF4,15u);
+}
+void bm_sound_event_repair_beep(const BmSoundOut *o,uint8_t on){
+  BmPokey *k=group(o,BM_SOUND_BEEP);
+  if(!on){bm_pokey_write(k,BM_POKEY_AUDC4,0u);return;}
+  bm_pokey_write(k,BM_POKEY_AUDF4,0x15u);bm_pokey_write(k,BM_POKEY_AUDC4,0xa2u);
+}

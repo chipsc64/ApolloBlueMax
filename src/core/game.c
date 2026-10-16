@@ -14,48 +14,30 @@
 #if !BM_ATARI_FLIGHT
 static int16_t clamp16(int16_t v,int16_t lo,int16_t hi){return v<lo?lo:(v>hi?hi:v);}
 #endif
-/* Sound groups.  The original shares four POKEY channels, so a warning
-   cuts off a gun and LINE silences a falling bomb.  ENHANCED_SOUND gives
-   each group its own POKEY; the default build keeps the single one. */
-enum { SND_MAIN, SND_GUN, SND_GROUND_GUN, SND_WARN, SND_BEEP, SND_BOMB };
-static BmPokey *snd(BmGame *g,unsigned group){
-#if BM_ENHANCED_SOUND
-  return group?&g->pokey_extra[group-1u]:&g->pokey;
-#else
-  (void)group;return &g->pokey;
-#endif
-}
-/* AUDC4=0 (CRASH): every POKEY that carries a channel-4 sound. */
-static void sound_audc4_off(BmGame *g){
-  unsigned group;
-  for(group=SND_MAIN;group<=SND_BEEP;++group)
-    bm_pokey_write(snd(g,group),BM_POKEY_AUDC4,0u);
-}
-static void sound_quiet_all(BmGame *g){
-  unsigned group;
-  for(group=SND_MAIN;group<=SND_BOMB;++group)bm_sound_quiet(snd(g,group));
-}
-/* EXXON.0 AFX: AUDF1=251, AUDF3=13 and the propeller at $C1. */
-static void sound_afx(BmGame *g){
-  bm_pokey_write(&g->pokey,BM_POKEY_AUDF1,251u);
-  bm_pokey_write(&g->pokey,BM_POKEY_AUDF3,13u);
-  g->sound.engine=0xc1u;bm_pokey_write(&g->pokey,BM_POKEY_AUDC1,0xc1u);
+/* Sound output: one POKEY for every group, or (ENHANCED_SOUND) one each.
+   The game only raises bm_sound_event_* events; it never writes POKEY
+   registers itself. */
+static const BmSoundOut *sound_out(BmGame *g){
+  unsigned i;
+  for(i=0;i<BM_SOUND_GROUPS;++i)
+    g->sound_out.pokey[i]=(BM_ENHANCED_SOUND&&i)?&g->pokey_extra[i-1u]:&g->pokey;
+  g->sound_out.separate=(uint8_t)BM_ENHANCED_SOUND;
+  return &g->sound_out;
 }
 /* EXXON.0 EB: in the attract mode ($6F3) PLAY.IT runs first and AFY waits
    (CNSL, DFLSH) until the tune clears $6FF; only then AFX and CW. */
 static void demo_music(BmGame *g){
-  bm_sound_quiet(&g->pokey);
-  g->music_wait=1u;bm_sound_music_start(&g->sound);
+  g->music_wait=1u;bm_sound_event_demo_music(&g->sound,sound_out(g));
 }
-/* EXXON.6 XXX: start the explosion sound (XSND runs it in the VBI). */
-static void sound_xxx(BmGame *g,uint8_t limit,uint8_t volume){
-  bm_sound_xxx(&g->sound,&g->pokey,limit,volume);
+/* EXXON.6 XXX: an explosion sound (XSND runs it in the VBI). */
+static void sound_explosion(BmGame *g,BmExplosion kind){
+  bm_sound_event_explosion(&g->sound,sound_out(g),kind);
 }
 /* S7 (EXXON.12): an object drawn in a bonus colour ($7C, 50 or $A8) counts
    as a destroyed objective ($6AC) and scores two extra S100.  It falls
    through to R7: $66F=120 and XXX 50,$4C. */
 static void score_s7(BmGame *g){
-  sound_xxx(g,50u,0x4cu);
+  sound_explosion(g,BM_EXPLOSION_OBJECT);
   uint8_t colour=g->classic_world.p2_colour;
   if(colour==0x7cu||colour==50u||colour==0xa8u){
     if(g->mission_targets_destroyed<255u)++g->mission_targets_destroyed;
@@ -102,7 +84,7 @@ static uint8_t bomb_ship(BmGame *g,int sx,int sy){
     w->ship_destroyed=1;w->ship_destroy_timer=120;w->ship_hits_remaining=0;
     w->gun2_shot_y=0;w->gun2_shot_explosion=0;
     w->impact_flash_ticks=12; /* BMBSHP -> ABA */
-    g->sound.gun=255u;        /* BMBSHP: $648=255 */
+    bm_sound_event_shot_end(&g->sound);  /* BMBSHP: $648=255 */
     score_s7(g);
     g->player_bomb_explosion=0;g->player_bomb_target_hit=1;
     g->player_bomb_water_splash=0;g->player_bomb_grass_impact=0;
@@ -178,8 +160,8 @@ static void hit_enemy_fighter(BmGame *g){
     w->enemy_fighter_destroyed=1u;            /* $B1=0 */
     w->enemy_fighter_destroy_timer=100u;      /* $66F=100 */
     w->impact_flash_ticks=12u;                /* ABA */
-    g->sound.gun=255u;                        /* VB: RO */
-    sound_xxx(g,50u,0x4cu);                   /* VB: XXX 50,$4C */
+    bm_sound_event_shot_end(&g->sound);       /* VB: RO */
+    sound_explosion(g,BM_EXPLOSION_AIRCRAFT);  /* VB: XXX 50,$4C */
     return;
   }
 }
@@ -367,13 +349,10 @@ static void bomb_lands(BmGame *g,int16_t x,int16_t y){
   /* Z3 .13 (roof zone, no roof): the drop sound runs on from $6EC (CDRP).
      Otherwise AFP silences AUDC2; water splashes ($1B6B), land explodes
      ($1B61: XXX $2A,$4C). */
-  if(g->classic_world.bomb_zone==1u&&g->classic_world.bomb_impact_code!=96u){
-    g->sound.drop=g->sound.drop_last;++g->sound.dropping;
-  }else{
-    bm_pokey_write(snd(g,SND_BOMB),BM_POKEY_AUDC2,0u);
-    if(g->classic_world.bomb_impact_water)bm_sound_splash_start(&g->sound,snd(g,SND_BOMB));
-    else sound_xxx(g,0x2au,0x4cu);
-  }
+  bm_sound_event_bomb_lands(&g->sound,sound_out(g),
+    g->classic_world.bomb_zone==1u&&g->classic_world.bomb_impact_code!=96u?
+      BM_BOMB_BEHIND_ROOFS:
+    g->classic_world.bomb_impact_water?BM_BOMB_WATER:BM_BOMB_LAND);
   g->player_bomb_grass_impact=(uint8_t)(
     !g->player_bomb_target_hit&&!g->player_bomb_water_splash&&
     g->classic_world.bomb_impact_code==0u);
@@ -392,9 +371,7 @@ static void begin_flight_crash(BmGame *g,uint8_t reason,uint8_t lift){
   /* ABA, then $6B9=22: XFLSH flashes the playfield for 22 updates. */
   g->classic_world.impact_flash_ticks=22u;
   /* XXX 80,$4F; later the propeller (AUDC1) and AUDC4 fall silent. */
-  sound_xxx(g,80u,0x4fu);
-  bm_pokey_write(&g->pokey,BM_POKEY_AUDC1,0u);
-  sound_audc4_off(g);
+  bm_sound_event_crash(&g->sound,sound_out(g));
   /* AFP: a falling bomb lands where it is; HG ends the shot. */
   if(g->player_bomb_active){
     g->player_bomb_active=0u;g->player_bomb_timer=255u;
@@ -437,7 +414,7 @@ static void damage_player(BmGame *g){
   if(g->flight_damage_cooldown)return;
   g->flight_damage_cooldown=35u;
   g->status_flash=35u;                     /* SV: $CA=35 (COLRDM) */
-  sound_xxx(g,15u,0x48u);                  /* SV: XXX 15,$48 */
+  sound_explosion(g,BM_EXPLOSION_DAMAGE);  /* SV: XXX 15,$48 */
   if(!g->flight_service.damage_level){
     g->flight_fuel.active=0u;g->flight_fuel.empty=1u;
     return;
@@ -619,7 +596,7 @@ static uint8_t capital_bomb(BmGame *g,int x,int y){
   w->capital_wreck=1u;w->capital_flash=16u;
   w->impact_flash_ticks=16u;               /* $6B9=16 */
   w->quake=26;                             /* $6BE=26: QUAKE */
-  sound_xxx(g,70u,0x4eu);                  /* XXX 70,$4E */
+  sound_explosion(g,BM_EXPLOSION_CAPITAL); /* XXX 70,$4E */
   return 1u;
 }
 /* EXXON.14 LOW and EXXON.10 COLRDM: the status-line COLBK ($66E).  LOW
@@ -634,16 +611,13 @@ static void status_colour_step(BmGame *g){
       w->status_bk=(uint8_t)(g->flight_fuel.active&&(g->play_frames&8u)&&
                              g->flight_speed>=200u?38u:0u);
       /* LOW .6: the warning tone on channel 2 ($6F8), or .10 silence. */
-      if(w->status_bk){
-        g->sound.splash=0u;g->sound.low_tone=10u;
-        bm_pokey_write(snd(g,SND_WARN),BM_POKEY_AUDF2,10u);
-        bm_pokey_write(snd(g,SND_WARN),BM_POKEY_AUDC2,0xa6u);
-      }else if(g->flight_fuel.active)bm_pokey_write(snd(g,SND_WARN),BM_POKEY_AUDC2,0u);
+      if(w->status_bk)bm_sound_event_low_altitude(&g->sound,sound_out(g),BM_LOW_TONE);
+      else if(g->flight_fuel.active)
+        bm_sound_event_low_altitude(&g->sound,sound_out(g),BM_LOW_SILENT);
     }else{
       w->status_bk=alt<29?18u:0u;
-      if(alt<29&&g->sound.low_tone){                  /* .3 */
-        g->sound.low_tone=0u;bm_pokey_write(snd(g,SND_WARN),BM_POKEY_AUDC2,0u);
-      }
+      if(alt<29)                                     /* .3 */
+        bm_sound_event_low_altitude(&g->sound,sound_out(g),BM_LOW_CLEAR);
     }
   }
   if(g->status_flash)w->status_bk=--g->status_flash?48u:0u;
@@ -725,7 +699,7 @@ static uint8_t attack_column(BmGame *g){
 static uint8_t airfield_bmbr(BmGame *g){
   BmWorldBuffer *w=&g->classic_world;
   bm_world_crash_step(w);
-  bm_sound_splash(&g->sound,snd(g,SND_BOMB));     /* BMBR: SPLASH */
+  bm_sound_event_splash_step(&g->sound,sound_out(g));  /* BMBR: SPLASH */
   if(g->player_bomb_explosion)--g->player_bomb_explosion;
   if(g->player_bomb_active){
     if(bomb_hits_plane(g)){
@@ -766,12 +740,12 @@ static uint8_t airfield_attack(BmGame *g){
   if(w->object_slot!=254u)return 0u;
   /* PBMB .2: AUDC1=$C3 while the attacker flies; $641 again once L6 has
      cleared $FD. */
-  bm_pokey_write(&g->pokey,BM_POKEY_AUDC1,0xc3u);
+  bm_sound_event_attacker(&g->sound,sound_out(g),1u);
   if(g->play_frames&1u){
     bm_world_airfield_attack_step(w);
     if(!w->object_slot){
       w->object_slot=255u;
-      bm_pokey_write(&g->pokey,BM_POKEY_AUDC1,g->sound.engine);
+      bm_sound_event_attacker(&g->sound,sound_out(g),0u);
     }
   }
   return airfield_bmbr(g);
@@ -784,9 +758,7 @@ static void game_start(BmGame *g,uint32_t seed,uint8_t skill,uint8_t gravity,
   { unsigned i;for(i=0;i<5u;++i)bm_pokey_reset(&g->pokey_extra[i]); }
   /* EXXON.0: STOP.SN, AUDCTL 0, SKCTL 3; NNNN: AUDF1=251 and QUIET; then
      AFX (after the demo's tune, see demo_music). */
-  bm_pokey_write(&g->pokey,BM_POKEY_SKCTL,3u);
-  bm_pokey_write(&g->pokey,BM_POKEY_AUDF1,251u);
-  sound_afx(g);
+  bm_sound_event_power_on(&g->sound,sound_out(g));
   g->mission_rank_level=skill;g->mission_difficulty=gravity;
   g->option_reversed=reversed;g->flight_gravity_enabled=gravity;
   g->status_pf1=158u;                      /* CNSL/MENU START: $6F4=158 */
@@ -939,7 +911,7 @@ static void game_tick(BmGame *g,const BmInput *in){
     if(consol==6u&&g->mode!=BM_STATE_PAUSED){game_restart(g);return;}
     if(consol==3u&&g->mode!=BM_STATE_PAUSED){
       g->mode=BM_STATE_OPTIONS;g->menu_cursor=0u;g->console_previous=3u;
-      sound_quiet_all(g);                  /* CNSL: QUIET */
+      bm_sound_event_quiet(sound_out(g));  /* CNSL: QUIET */
       return;
     }
   }
@@ -973,10 +945,8 @@ static void game_tick(BmGame *g,const BmInput *in){
       unsigned elapsed=150u+8u*15u-g->end_timer;
       --g->end_timer;
       if(elapsed>=150u&&!((elapsed-150u)%15u)){
-        if(g->sound.engine==0xc0u){              /* .35: PLAY.IT, RNK */
-          g->end_timer=0u;bm_sound_music_start(&g->sound);
-        }else{
-          --g->sound.engine;bm_pokey_write(&g->pokey,BM_POKEY_AUDC1,g->sound.engine);
+        if(bm_sound_event_engine_stop_step(&g->sound,sound_out(g))){
+          g->end_timer=0u;bm_sound_event_end_music(&g->sound);   /* .35: PLAY.IT, RNK */
         }
       }
     }
@@ -996,7 +966,7 @@ static void game_tick(BmGame *g,const BmInput *in){
       bm_flight_fuel_step(&g->flight_fuel,flight_joystick(in),
                           (uint8_t)(g->flight_service.damage_slots&BM_DAMAGE_F));
       g->player.fuel=(int16_t)g->flight_fuel.value;
-      bm_sound_roar(&g->sound,&g->pokey,flight_joystick(in));
+      bm_sound_event_engine(&g->sound,sound_out(g),flight_joystick(in));
       return;
     }
 #endif
@@ -1036,7 +1006,7 @@ static void game_tick(BmGame *g,const BmInput *in){
 #endif
     }
     else if(result==BM_TAKEOFF_CRASH)begin_flight_crash(g,1u,0u);
-    bm_sound_roar(&g->sound,&g->pokey,flight_joystick(in));   /* TAKOF */
+    bm_sound_event_engine(&g->sound,sound_out(g),flight_joystick(in));   /* TAKOF */
     /* TAKOF calls PBMB as well. */
     if(g->classic_world.object_slot==254u&&(g->play_frames&1u))
       bm_world_airfield_attack_step(&g->classic_world);
@@ -1063,7 +1033,7 @@ static void game_tick(BmGame *g,const BmInput *in){
       /* N4: PROP, TURN, PBMB, ROAR for 14 updates, then MZ.  ($6B0=0 on
          RTCLOK&3==0 only feeds a TAKOF branch that never runs: it needs
          SC+$665<81 while TKOSPD keeps the takeoff glyph 144 there.) */
-      bm_sound_roar(&g->sound,&g->pokey,flight_joystick(in));
+      bm_sound_event_engine(&g->sound,sound_out(g),flight_joystick(in));
       if(!--g->flight_service_tail){
         g->mode=BM_STATE_TAKEOFF;
         g->takeoff_speed=(BmTakeoffSpeed){144u,144u,144u};
@@ -1114,16 +1084,12 @@ static void game_tick(BmGame *g,const BmInput *in){
          skip (ADO) silence channel 4. */
       if(g->flight_service_phase==2u){
         uint8_t c=g->flight_service.repair_countdown;
-        if(c&&c<20u){
-          bm_pokey_write(snd(g,SND_BEEP),BM_POKEY_AUDF4,0x15u);
-          bm_pokey_write(snd(g,SND_BEEP),BM_POKEY_AUDC4,0xa2u);
-        }else if(c==90u)bm_pokey_write(snd(g,SND_BEEP),BM_POKEY_AUDC4,0u);
-      }else if(phase==2u)bm_pokey_write(snd(g,SND_BEEP),BM_POKEY_AUDC4,0u);
+        if(c&&c<20u)bm_sound_event_repair_beep(sound_out(g),1u);
+        else if(c==90u)bm_sound_event_repair_beep(sound_out(g),0u);
+      }else if(phase==2u)bm_sound_event_repair_beep(sound_out(g),0u);
     }
     /* GROUND: the propeller falls one step per loop down to $C1. */
-    if(!g->flight_ground_rollout&&g->sound.engine>=0xc2u){
-      --g->sound.engine;bm_pokey_write(&g->pokey,BM_POKEY_AUDC1,g->sound.engine);
-    }
+    if(!g->flight_ground_rollout)bm_sound_event_engine_idle(&g->sound,sound_out(g));
     g->player.speed=(int16_t)(g->flight_speed/100u);
     /* MJ still calls DRAW/DRUN while STOPL rolls. GROUND itself contains
        PROP/TURN/REFUEL/TIMER but no world draw, so V000 freezes terrain. */
@@ -1147,7 +1113,7 @@ static void game_tick(BmGame *g,const BmInput *in){
       else g->flight_crash_spread+=2;
       if(g->player_bomb_explosion)g->player_bomb_explosion--;
       bm_world_crash_step(&g->classic_world);
-      bm_sound_splash(&g->sound,snd(g,SND_BOMB));   /* AFQ: SPLASH */
+      bm_sound_event_splash_step(&g->sound,sound_out(g));   /* AFQ: SPLASH */
       if(!--g->flight_crash_timer){
         /* 704/705=0 hide both players; SK hides the enemy P2 after COLP02
            and a ship ($FD=15) loses its colour too.  Then $B0=$40. */
@@ -1297,7 +1263,7 @@ static void game_tick(BmGame *g,const BmInput *in){
     ){
     /* BOMB starts missile 1 at F4+2/F5+7.  Relative to the translated TRIG
        origin (F4+6/F5+2), this is eight pixels left and five pixels down. */
-    bm_sound_bomb_release(&g->sound,snd(g,SND_BOMB),&g->pokey);
+    bm_sound_event_bomb_release(&g->sound,sound_out(g));
     g->player_bomb_active=1u;
     g->player_bomb_phase=0u;
     g->player_bomb_x=(int16_t)(g->player.x-4);
@@ -1340,14 +1306,11 @@ static void game_tick(BmGame *g,const BmInput *in){
     bm_world_airfield_attack_step(&g->classic_world);
   /* COMMON: ROAR (KMKZ once the engine is dead), GUNSND, GGNSND. */
 #if BM_ATARI_FLIGHT
-  if(g->flight_fuel.active)bm_sound_roar(&g->sound,&g->pokey,flight_joystick(in));
-  else bm_sound_engine_dying(&g->sound,&g->pokey);
+  if(g->flight_fuel.active)bm_sound_event_engine(&g->sound,sound_out(g),flight_joystick(in));
+  else bm_sound_event_engine_dead(&g->sound,sound_out(g));
 #endif
-  bm_sound_gunsnd(&g->sound,snd(g,SND_GUN));
-  bm_sound_splash(&g->sound,snd(g,SND_BOMB));
-  bm_sound_ggnsnd(&g->sound,snd(g,SND_GROUND_GUN));
-  bm_sound_runsnd(&g->sound,snd(g,SND_BEEP));    /* SRT/LAND: RUNSND */
-  bm_sound_cdrp(&g->sound,snd(g,SND_BOMB),&g->pokey);   /* SRT: CDRP */
+  /* SRT/LAND: RUNSND and CDRP as well. */
+  bm_sound_event_update(&g->sound,sound_out(g));
   check_score(g);                          /* COMMON: CKSC */
   g->classic_world.player_fast=(uint8_t)(g->flight_speed>=200u);
   g->classic_world.capital_destroyed=g->mission_phase;   /* $6C2 */
@@ -1442,49 +1405,28 @@ static void game_tick(BmGame *g,const BmInput *in){
    and the VBI's XSND (it runs in every loop, PAUSE included). */
 void bm_game_tick(BmGame *g,const BmInput *in){
   BmWorldBuffer *w=&g->classic_world;
+  const BmSoundOut *o;
   uint8_t shot=w->enemy_fighter_shot_active,own=g->player_shot_active;
   game_tick(g,in);
   if(g->mode==BM_STATE_OPTIONS)return;
-  if(w->sound_gun_fired)g->sound.ground_gun=12u;
-  if(w->sound_flak&&!g->sound.xp_count)sound_xxx(g,2u,0x47u);
-  if(w->sound_runway)g->sound.runway=0x19u;
-  if(w->sound_warn==1u){
-    if(!BM_ENHANCED_SOUND)g->sound.gun=0u;           /* WARN: $648=0 */
-    bm_sound_warn(&g->sound,snd(g,SND_WARN));
-  }else if(w->sound_warn==2u)bm_pokey_write(snd(g,SND_WARN),BM_POKEY_AUDC4,0u);
-  if(w->sound_flash==1u)bm_pokey_write(snd(g,SND_BEEP),BM_POKEY_AUDC4,0u);
-  else if(w->sound_flash==2u){
-    bm_pokey_write(snd(g,SND_BEEP),BM_POKEY_AUDC4,0xa2u);
-    bm_pokey_write(snd(g,SND_BEEP),BM_POKEY_AUDF4,15u);
-  }
-  /* LINE: in line, AUDC2 off below depth 18 and $6A4 counts the tone
-     ($F/$A2) down from 255 to 235; out of line $6A4=0.  Both leave
-     channel 3 to a running explosion ($644). */
-  if(w->sound_line==1u){
-    /* LINE's AUDC2=0 meant the bomb channel; mixed, it only stops LOW. */
-    if(w->sound_line_low)bm_pokey_write(snd(g,SND_WARN),BM_POKEY_AUDC2,0u);
-    if(BM_ENHANCED_SOUND||!g->sound.xp_count){
-      if(--g->sound.line_timer>=235u){
-        bm_pokey_write(snd(g,SND_WARN),BM_POKEY_AUDF3,15u);
-        bm_pokey_write(snd(g,SND_WARN),BM_POKEY_AUDC3,0xa2u);
-      }else bm_pokey_write(snd(g,SND_WARN),BM_POKEY_AUDC3,0u);
-    }
-  }else if(w->sound_line==2u){
-    g->sound.line_timer=0u;
-    if(BM_ENHANCED_SOUND||!g->sound.xp_count)
-      bm_pokey_write(snd(g,SND_WARN),BM_POKEY_AUDC3,0u);
-  }
+  o=sound_out(g);
+  if(w->sound_gun_fired)bm_sound_event_ground_gun(&g->sound);
+  if(w->sound_flak)bm_sound_event_flak(&g->sound,o);
+  if(w->sound_runway)bm_sound_event_runway(&g->sound);
+  if(w->sound_warn)bm_sound_event_warning(&g->sound,o,(uint8_t)(w->sound_warn==1u));
+  if(w->sound_flash)bm_sound_event_marker(o,(uint8_t)(w->sound_flash==2u));
+  if(w->sound_line)
+    bm_sound_event_line(&g->sound,o,(uint8_t)(w->sound_line==1u),w->sound_line_low);
   w->sound_gun_fired=w->sound_flak=w->sound_runway=0u;
   w->sound_warn=w->sound_flash=w->sound_line=0u;
-  if(!shot&&w->enemy_fighter_shot_active)g->sound.gun=0x30u;     /* RN */
-  else if(shot&&!w->enemy_fighter_shot_active)g->sound.gun=255u;  /* RO */
+  if(!shot&&w->enemy_fighter_shot_active)bm_sound_event_enemy_shot(&g->sound); /* RN */
+  else if(shot&&!w->enemy_fighter_shot_active)bm_sound_event_shot_end(&g->sound); /* RO */
   /* MAX.1 TRIG: $648=3 when the own shot starts ($19B3), 255 when it ends
      (HG, $19EA); GUNSND crackles in between. */
-  if(!own&&g->player_shot_active)g->sound.gun=3u;
-  else if(own&&!g->player_shot_active)g->sound.gun=255u;
-  bm_sound_xsnd(&g->sound,&g->pokey);
-  /* Timer 1 (CDTMR1): PLAY.IT's player once per VBI. */
-  if(g->sound.music_on&&!bm_sound_music_tick(&g->sound,&g->pokey)&&g->music_wait){
-    g->music_wait=0u;sound_afx(g);
+  if(!own&&g->player_shot_active)bm_sound_event_own_shot(&g->sound);
+  else if(own&&!g->player_shot_active)bm_sound_event_shot_end(&g->sound);
+  /* The VBI: XSND, and timer 1 runs PLAY.IT; the demo's tune ends in AFX. */
+  if(bm_sound_event_vblank(&g->sound,o)&&g->music_wait){
+    g->music_wait=0u;bm_sound_event_takeoff_engine(&g->sound,o);
   }
 }

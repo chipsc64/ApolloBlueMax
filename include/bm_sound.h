@@ -58,4 +58,72 @@ uint8_t bm_sound_music_tick(BmSound *s,BmPokey *k);
 void bm_sound_stop(BmPokey *k);
 /* EXXON.16 QUIET: AUDC1..AUDC4 = 0. */
 void bm_sound_quiet(BmPokey *k);
+
+/* ---- Game sound events -------------------------------------------------
+   The game only calls these.  Each names something that happens in the
+   game; this POKEY implementation turns it into the original register
+   writes.  A future sample-based backend can implement the same events.
+
+   Output: the POKEY per sound group.  In the original all point to one
+   POKEY; with ENHANCED_SOUND each group has its own (separate=1), so
+   that a warning no longer stops the gun and LINE no longer silences the
+   bomb. */
+enum { BM_SOUND_MAIN, BM_SOUND_GUN, BM_SOUND_GROUND_GUN, BM_SOUND_WARN,
+  BM_SOUND_BEEP, BM_SOUND_BOMB, BM_SOUND_GROUPS };
+typedef struct { BmPokey *pokey[BM_SOUND_GROUPS]; uint8_t separate; } BmSoundOut;
+
+/* XXX callers, with their limit/volume. */
+typedef enum { BM_EXPLOSION_CRASH, BM_EXPLOSION_DAMAGE, BM_EXPLOSION_AIRCRAFT,
+  BM_EXPLOSION_OBJECT, BM_EXPLOSION_CAPITAL, BM_EXPLOSION_FLAK,
+  BM_EXPLOSION_BOMB } BmExplosion;
+typedef enum { BM_BOMB_LAND, BM_BOMB_WATER, BM_BOMB_BEHIND_ROOFS } BmBombImpact;
+typedef enum { BM_LOW_TONE, BM_LOW_SILENT, BM_LOW_CLEAR } BmLowAltitude;
+
+/* Game start (EXXON.0 NNNN: SKCTL 3, AUDF1 251) and AFX (the propeller). */
+void bm_sound_event_power_on(BmSound *s,const BmSoundOut *o);
+void bm_sound_event_takeoff_engine(BmSound *s,const BmSoundOut *o);
+/* QUIET on every POKEY (CNSL -> OPTION). */
+void bm_sound_event_quiet(const BmSoundOut *o);
+/* PLAY.IT: the attract mode's tune (after QUIET) and the end tune. */
+void bm_sound_event_demo_music(BmSound *s,const BmSoundOut *o);
+void bm_sound_event_end_music(BmSound *s);
+/* Once per update (the VBI): XSND and the tune.  Returns 1 when the tune
+   has just ended. */
+uint8_t bm_sound_event_vblank(BmSound *s,const BmSoundOut *o);
+void bm_sound_event_explosion(BmSound *s,const BmSoundOut *o,BmExplosion kind);
+/* The shell burst only sounds when no explosion is running ($644=0). */
+void bm_sound_event_flak(BmSound *s,const BmSoundOut *o);
+/* CRASH: propeller off, every channel-4 sound off. */
+void bm_sound_event_crash(BmSound *s,const BmSoundOut *o);
+/* Propeller: ROAR (stick = $D7), KMKZ when the engine is dead, GROUND's
+   idle fall, the attacker's engine (PBMB) and STOPL's last steps (returns
+   1 once the propeller is at $C0). */
+void bm_sound_event_engine(BmSound *s,const BmSoundOut *o,uint8_t stick);
+void bm_sound_event_engine_dead(BmSound *s,const BmSoundOut *o);
+void bm_sound_event_engine_idle(BmSound *s,const BmSoundOut *o);
+void bm_sound_event_attacker(BmSound *s,const BmSoundOut *o,uint8_t flying);
+uint8_t bm_sound_event_engine_stop_step(BmSound *s,const BmSoundOut *o);
+/* Machine guns ($648): a shot starts (enemy RN $30, own TRIG 3) or ends
+   (RO/HG 255). */
+void bm_sound_event_enemy_shot(BmSound *s);
+void bm_sound_event_own_shot(BmSound *s);
+void bm_sound_event_shot_end(BmSound *s);
+/* A ground gun fires ($6AF=12); a runway appears (R3: $64C=$19). */
+void bm_sound_event_ground_gun(BmSound *s);
+void bm_sound_event_runway(BmSound *s);
+/* COMMON/SRT per update: GUNSND, SPLASH, GGNSND, RUNSND, CDRP. */
+void bm_sound_event_update(BmSound *s,const BmSoundOut *o);
+/* SPLASH alone (BMBR, the CRASH loop). */
+void bm_sound_event_splash_step(BmSound *s,const BmSoundOut *o);
+void bm_sound_event_bomb_release(BmSound *s,const BmSoundOut *o);
+void bm_sound_event_bomb_lands(BmSound *s,const BmSoundOut *o,BmBombImpact impact);
+/* LOW: the low-altitude tone, its silent blink phase, or leaving the band. */
+void bm_sound_event_low_altitude(BmSound *s,const BmSoundOut *o,BmLowAltitude state);
+/* LINE: enemy in line (low: depth below 18) or not. */
+void bm_sound_event_line(BmSound *s,const BmSoundOut *o,uint8_t in_line,uint8_t low);
+/* The aircraft warning blinks (WARN / silence). */
+void bm_sound_event_warning(BmSound *s,const BmSoundOut *o,uint8_t on);
+/* FLSH: the landing marker's tone; SA: the repair beep. */
+void bm_sound_event_marker(const BmSoundOut *o,uint8_t on);
+void bm_sound_event_repair_beep(const BmSoundOut *o,uint8_t on);
 #endif
