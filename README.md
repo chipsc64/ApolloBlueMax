@@ -100,12 +100,33 @@ Add an option to build a variant:
 | `CAPITAL_TEST=1` | `bluemax-apollo-capital-test1` | test aid: start near the capital |
 | `CAPITAL_TEST=2` | `bluemax-apollo-capital-test2` | as above, two capital targets already destroyed |
 | `RENDERER=scaled` | `bluemax-apollo-scaled` | the classic picture at 640x400 in 16-bit colour (display path test) |
+| `RENDERER=hd` | `bluemax-apollo-hd` | 640x400 in 16-bit colour with the textures from `art/` (see below) |
 | `SOUND_TEST=1` | `bluemax-apollo-sound-test` | POKEY test tones; audio diagnostics on exit |
 
 Options can be combined, for example
 `make ... TICK_RATE=50 ENHANCED_SOUND=1`. When you change only options,
 remove the matching `build/` directory first: make only tracks source
 changes.
+
+### Upgraded graphics (`RENDERER=hd`)
+
+The HD renderer draws at 640x400 in 16-bit colour. The original picture
+still decides what is where: coastlines, roads, buildings and objects, and
+all collisions (they use the Atari shapes, see `collision.c`). Each flat
+Atari colour of the playfield can get a texture:
+
+```text
+art/materials/C4.png    16x16, seamless: grass (Atari colour $C4)
+art/materials/94.png    16x16, seamless: water (Atari colour $94)
+```
+
+The file name is the Atari colour in hex. A texture covers one Atari tile
+(8x8 Atari pixels at 2x) and scrolls with the landscape. Colours without a
+texture, sprites, the status line and flashes stay as in the original.
+The two textures in the repository are generated examples
+(`tools/make_example_art.py`); replace them with real artwork. PNGs must be
+8-bit RGB, RGBA, grey or palette images. `tools/art_assets.py` converts
+them during the build, so no extra Python packages are needed.
 
 ### Enhanced sound
 
@@ -135,7 +156,7 @@ make test-flight                # Atari flight model
 make test-takeoff               # game flow: takeoff, landing, service, capital, ...
 make test-scroll                # scroll timing
 make test-pokey                 # POKEY emulation, sound routines and tune
-make test-render                # renderers (classic, scaled)
+make test-render                # renderers (classic, scaled, hd)
 ```
 
 `make headless` runs the game without a window and prints framebuffer
@@ -146,14 +167,16 @@ checksums.
 ```text
 include/            core interfaces (game, world, flight, POKEY, sound, platform)
 src/core/           portable game code: game.c, world.c, flight.c, collision.c,
-                    render.c (classic renderer), render_scaled.c, renderer.c,
+                    render.c (classic renderer), render_scaled.c, render_hd.c,
+                    renderer.c,
                     sprite.c, tile.c,
                     pokey.c, sound.c
 src/main.c          main loop
 platform/apollo/    SAGA video, audio, input and the AMMX blitter
 platform/headless/  backend for tests and the headless build
 tests/              host tests
-tools/              asset and tune extraction, status font, snapshots
+tools/              asset, tune and art conversion, status font, snapshots
+art/                upgraded graphics for RENDERER=hd
 ```
 
 ## How it works

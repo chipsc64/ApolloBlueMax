@@ -14,6 +14,9 @@ typedef struct {
 extern const BmRenderer bm_renderer_classic;
 /* The classic picture at 640x400 RGB565, 2x2 per pixel (render_scaled.c). */
 extern const BmRenderer bm_renderer_scaled;
+/* The classic picture at 640x400 RGB565 with the art/materials textures on
+   the playfield (render_hd.c). */
+extern const BmRenderer bm_renderer_hd;
 /* The renderer this build uses (Makefile RENDERER=...). */
 const BmRenderer *bm_renderer_selected(void);
 #endif

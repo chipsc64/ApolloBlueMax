@@ -2,7 +2,11 @@
 #ifndef BM_RENDERER_SCALED
 #define BM_RENDERER_SCALED 0
 #endif
-/* RENDERER=classic or scaled (Makefile). */
+#ifndef BM_RENDERER_HD
+#define BM_RENDERER_HD 0
+#endif
+/* RENDERER=classic, scaled or hd (Makefile). */
 const BmRenderer *bm_renderer_selected(void){
+  if(BM_RENDERER_HD)return &bm_renderer_hd;
   return BM_RENDERER_SCALED?&bm_renderer_scaled:&bm_renderer_classic;
 }
