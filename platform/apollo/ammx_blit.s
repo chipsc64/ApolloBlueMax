@@ -35,3 +35,15 @@ _bm_ammx_sprite8:
 .sprite_done:
         move.l  (sp)+,d2
         rts
+
+; 68080 event counters (MOVEC, see Docs/Integer/MOVEC.md): $809 CCC = CPU
+; clock counter, $80F DCM = data cache misses.  Encoded as words because
+; the assembler does not know these control registers.
+        xdef    _bm_cpu_cycles
+        xdef    _bm_cpu_cache_misses
+_bm_cpu_cycles:
+        dc.w    $4e7a,$0809             ; movec CCC,d0
+        rts
+_bm_cpu_cache_misses:
+        dc.w    $4e7a,$080f             ; movec DCM,d0
+        rts

@@ -1,5 +1,6 @@
 #include "bm_platform.h"
 #include "bm_frame.h"
+#include "bm_profile.h"
 #include "bm_ammx.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -96,6 +97,8 @@ typedef struct {
     uint32_t work_ticks,work_max,render_ticks,render_samples;
     uint32_t draw_ticks,draw_max,draw_frames;   /* acquire -> present */
     uint64_t draw_start;
+    uint32_t draw_misses,miss_start,cpu_last,eclock_last;  /* SOUND_TEST */
+    uint64_t cpu_sum,eclock_sum;
     uint64_t work_start,started;
 } SagaState;
 static SagaState saga;
@@ -133,6 +136,9 @@ static int saga_open(BmPlatform *p,const BmFrame *frame){
     bm_sprite_set_blitter(bm_sprite_blit_ammx);
     memset(&saga,0,sizeof(saga));
     timer_open(&saga);
+#if BM_SOUND_TEST
+    bm_profile_cycles=bm_cpu_cycles;
+#endif
     saga.format=frame->format;saga.bytes=frame_bytes(&frame->format);
     for(i=0;i<VIDEO_BUFFERS;++i){
         saga.video[i]=align64(saga.storage[i]);memset(saga.video[i],0,saga.bytes);
@@ -256,6 +262,9 @@ static void saga_acquire(BmPlatform *p,BmFrame *frame){
     for(i=0;i<VIDEO_BUFFERS;++i)if(i!=s->shown&&i!=s->queued)break;
     s->drawing=i;
     if(s->timer_open)s->draw_start=eclock64();
+#if BM_SOUND_TEST
+    s->miss_start=bm_cpu_cache_misses();
+#endif
     if(frame->format.pixel!=BM_PIXEL_CLUT8){
         frame->pixels=s->video[i];
         frame->stride=(uint32_t)frame->format.width*(frame->format.pixel==BM_PIXEL_RGB565?2u:4u);
@@ -273,6 +282,9 @@ static void saga_present(BmPlatform *p,const BmFrame *frame){
     if(s->timer_open&&s->draw_start){
         uint32_t d=(uint32_t)(eclock64()-s->draw_start);
         s->draw_ticks+=d;if(d>s->draw_max)s->draw_max=d;++s->draw_frames;
+#if BM_SOUND_TEST
+        s->draw_misses+=bm_cpu_cache_misses()-s->miss_start;
+#endif
     }
 }
 static unsigned saga_wait_vblank(BmPlatform *p){
@@ -287,6 +299,13 @@ static unsigned saga_wait_vblank(BmPlatform *p){
     passed=bm_vblank_count-s->vblank_seen;s->vblank_seen+=passed;++s->frames;
     if(passed>1u)s->missed+=passed-1u;
     if(s->audio_on)s->work_start=eclock64();
+#if BM_SOUND_TEST
+    if(s->timer_open){
+        uint32_t c=bm_cpu_cycles(),e=(uint32_t)s->work_start;
+        if(s->cpu_last){s->cpu_sum+=c-s->cpu_last;s->eclock_sum+=e-s->eclock_last;}
+        s->cpu_last=c;s->eclock_last=e;
+    }
+#endif
     if(s->queued!=NO_BUFFER){
         if(s->format.pixel==BM_PIXEL_CLUT8)upload_changed_palette();
         REG32(SAGA_POINTER_WRITE)=(uint32_t)(uintptr_t)s->video[s->queued];
@@ -325,6 +344,16 @@ static void saga_close(BmPlatform *p){
                 (unsigned long)((uint64_t)s->work_ticks*1000000u/eclock_hz/(s->frames-1u)),
                 (unsigned long)((uint64_t)s->work_max*1000000u/eclock_hz),
                 (unsigned long)((uint64_t)s->render_ticks*1000000000u/eclock_hz/s->render_samples));
+            if(s->draw_frames&&s->eclock_sum){
+                uint32_t mhz=(uint32_t)(s->cpu_sum*eclock_hz/s->eclock_sum/1000000u);
+                unsigned k;
+                printf("Blue Max cpu: %luMHz cache-misses=%lu/frame while drawing\n",
+                    (unsigned long)mhz,(unsigned long)(s->draw_misses/s->draw_frames));
+                for(k=0;k<BM_PROFILE_SLOTS;++k)if(bm_profile_count[k]&&mhz)
+                    printf("Blue Max cycles: %s=%lu/frame (%luus)\n",k?"convert":"classic",
+                        (unsigned long)(bm_profile_total[k]/bm_profile_count[k]),
+                        (unsigned long)(bm_profile_total[k]/bm_profile_count[k]/mhz));
+            }
             if(s->draw_frames)
                 printf("Blue Max draw: %ux%u render+present=%luus/frame max=%luus\n",
                     (unsigned)s->format.width,(unsigned)s->format.height,

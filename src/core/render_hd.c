@@ -1,4 +1,5 @@
 #include "bm_renderer.h"
+#include "bm_profile.h"
 #include "bm_tile.h"
 #include "bm_art_assets.h"
 #include <string.h>
@@ -52,7 +53,9 @@ static void hd_render(const BmGame *g,BmFrame *frame){
   int x0=(w->quake_shift?-2:0)+w->fine_phase*2-8,y0=-(int)w->fine_phase*2;
   unsigned x,y,i,any=0u;
   if(!packed_ready)pack_textures();
+  uint32_t profile=bm_profile_start();
   bm_renderer_classic.render(g,&source);
+  bm_profile_stop(BM_PROFILE_CLASSIC,profile);profile=bm_profile_start();
   for(i=0;i<BM_PALETTE_SIZE;++i){uint32_t c=rgb565(classic.palette[i]);pair[i]=c<<16|c;}
   /* XFLSH swaps the playfield colours: keep the flash flat.  The OPTION
      screen is text. */
@@ -112,5 +115,6 @@ static void hd_render(const BmGame *g,BmFrame *frame){
       ++x;phase=(phase+1u)&7u;
     }
   }
+  bm_profile_stop(BM_PROFILE_CONVERT,profile);
 }
 const BmRenderer bm_renderer_hd={"hd",{640u,400u,BM_PIXEL_RGB565},hd_render};
