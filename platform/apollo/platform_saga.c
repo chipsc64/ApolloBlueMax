@@ -94,6 +94,8 @@ typedef struct {
     /* Diagnostics, printed on exit by the SOUND_TEST build. */
     uint32_t frames,missed,late_frames,signals,resyncs,underruns,max_error;
     uint32_t work_ticks,work_max,render_ticks,render_samples;
+    uint32_t draw_ticks,draw_max,draw_frames;   /* acquire -> present */
+    uint64_t draw_start;
     uint64_t work_start,started;
 } SagaState;
 static SagaState saga;
@@ -253,6 +255,7 @@ static void saga_acquire(BmPlatform *p,BmFrame *frame){
     SagaState *s=(SagaState*)p->userdata;uint8_t i;
     for(i=0;i<VIDEO_BUFFERS;++i)if(i!=s->shown&&i!=s->queued)break;
     s->drawing=i;
+    if(s->timer_open)s->draw_start=eclock64();
     if(frame->format.pixel!=BM_PIXEL_CLUT8){
         frame->pixels=s->video[i];
         frame->stride=(uint32_t)frame->format.width*(frame->format.pixel==BM_PIXEL_RGB565?2u:4u);
@@ -267,6 +270,10 @@ static void saga_present(BmPlatform *p,const BmFrame *frame){
         remember_palette(frame->indexed);
     }
     s->queued=s->drawing;
+    if(s->timer_open&&s->draw_start){
+        uint32_t d=(uint32_t)(eclock64()-s->draw_start);
+        s->draw_ticks+=d;if(d>s->draw_max)s->draw_max=d;++s->draw_frames;
+    }
 }
 static unsigned saga_wait_vblank(BmPlatform *p){
     SagaState *s=(SagaState*)p->userdata;uint32_t passed;
@@ -318,6 +325,11 @@ static void saga_close(BmPlatform *p){
                 (unsigned long)((uint64_t)s->work_ticks*1000000u/eclock_hz/(s->frames-1u)),
                 (unsigned long)((uint64_t)s->work_max*1000000u/eclock_hz),
                 (unsigned long)((uint64_t)s->render_ticks*1000000000u/eclock_hz/s->render_samples));
+            if(s->draw_frames)
+                printf("Blue Max draw: %ux%u render+present=%luus/frame max=%luus\n",
+                    (unsigned)s->format.width,(unsigned)s->format.height,
+                    (unsigned long)((uint64_t)s->draw_ticks*1000000u/eclock_hz/s->draw_frames),
+                    (unsigned long)((uint64_t)s->draw_max*1000000u/eclock_hz));
             printf("Blue Max audio: signals=%lu resyncs=%lu max_error=%lu underruns=%lu intena=%u\n",
                 (unsigned long)s->signals,(unsigned long)s->resyncs,(unsigned long)s->max_error,
                 (unsigned long)s->underruns,(unsigned)s->audio_intena);

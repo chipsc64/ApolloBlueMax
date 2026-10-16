@@ -26,6 +26,19 @@ static void pack_textures(void){
   packed_ready=1u;
 }
 
+/* Eight palette indices as two 32-bit words.  The 68080 reads unaligned
+   longwords directly; elsewhere memcpy keeps it portable. */
+#if defined(__mc68000__)
+typedef uint32_t __attribute__((may_alias)) bm_u32_alias;
+static inline void load8(const uint8_t *p,uint32_t *a,uint32_t *b){
+  *a=((const bm_u32_alias *)p)[0];*b=((const bm_u32_alias *)p)[1];
+}
+#else
+static inline void load8(const uint8_t *p,uint32_t *a,uint32_t *b){
+  memcpy(a,p,4u);memcpy(b,p+4u,4u);
+}
+#endif
+
 static void hd_render(const BmGame *g,BmFrame *frame){
   const BmWorldBuffer *w=&g->classic_world;
   BmFrame source={{BM_SCREEN_WIDTH,BM_SCREEN_HEIGHT,BM_PIXEL_CLUT8},&classic,0,0u};
@@ -73,7 +86,7 @@ static void hd_render(const BmGame *g,BmFrame *frame){
     while(x<BM_SCREEN_WIDTH){
       if(!phase&&x+8u<=BM_SCREEN_WIDTH){
         uint32_t a,b,same;
-        memcpy(&a,in+x,4u);memcpy(&b,in+x+4u,4u);
+        load8(in+x,&a,&b);
         same=(uint32_t)in[x]*0x01010101u;
         if(a==same&&b==same){
           const uint32_t *t=line_top[in[x]];
