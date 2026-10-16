@@ -17,6 +17,35 @@ extern const BmRenderer bm_renderer_scaled;
 /* The classic picture at 640x400 RGB565 with the art/materials textures on
    the playfield (render_hd.c). */
 extern const BmRenderer bm_renderer_hd;
+/* The objects the classic renderer draws, one entry each per frame, so
+   that an upgraded renderer can draw them its own way.  x/y: top-left of
+   the 16-pixel-wide Atari image in the 320x200 picture.  colour: the
+   object's Atari colour where it matters (P2 objects), else 0.  behind:
+   drawn behind the playfield (GPRIOR 4).  Kinds set in bm_sprite_hd_mask
+   are recorded but not drawn by the classic renderer. */
+typedef enum {
+  BM_SPRITE_PLAYER,        /* variant: bank (0 level, 1 left, 2 right) * 2 + propeller frame */
+  BM_SPRITE_SHADOW,        /* variant: 1 = the thin far shadow (SHCOL) */
+  BM_SPRITE_PLAYER_CRASH,  /* variant: 0 = P0 half, 1 = P1 half */
+  BM_SPRITE_PLAYER_SHOT,
+  BM_SPRITE_BOMB,          /* variant: the narrow end's phase */
+  BM_SPRITE_BOMB_EXPLOSION,/* variant: 1 = water splash */
+  BM_SPRITE_SHIP,          /* variant: 1 = destroyed */
+  BM_SPRITE_VEHICLE,       /* variant: 1 truck, 2 moving left, 4 destroyed */
+  BM_SPRITE_ENEMY,         /* variant: 1 forward, 2/4 turn left/right, 8 wreck, 16 crash colour */
+  BM_SPRITE_ENEMY_SHADOW,  /* variant: 1 = PLFWD's P3 layer */
+  BM_SPRITE_ENEMY_SHOT,
+  BM_SPRITE_GUNSIGHT,
+  BM_SPRITE_GUN_SHOT,      /* variant: 1 = shell burst */
+  BM_SPRITE_CAPITAL_TARGET,
+  BM_SPRITE_KINDS
+} BmSpriteKind;
+typedef struct { uint8_t kind,variant,colour,behind; int16_t x,y; } BmSpriteDraw;
+enum { BM_SPRITE_DRAW_MAX=32 };
+typedef struct { BmSpriteDraw draw[BM_SPRITE_DRAW_MAX]; unsigned count; } BmSpriteList;
+extern BmSpriteList bm_sprite_list;
+extern uint32_t bm_sprite_hd_mask;
+
 /* Converting one classic line (320 palette indices) into two 640-pixel
    RGB565 lines, as pixel pairs: one uint32_t per Atari pixel and line.
    pairs: the colour of each index twice.  For hd, line_top/line_bottom

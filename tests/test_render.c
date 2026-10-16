@@ -78,6 +78,41 @@ int main(void){
     check(!other_bad,"hd: textures where expected, the scaled picture elsewhere");
     check(tiles>0u&&!tile_bad,"hd: a grass tile shows the whole texture");
   }
+  /* T36a: the classic renderer lists the objects it draws; a kind in
+     bm_sprite_hd_mask is listed but not drawn, and only its own box of
+     the picture changes. */
+  { static BmFramebuffer with,without;
+    BmFrame a={{BM_SCREEN_WIDTH,BM_SCREEN_HEIGHT,BM_PIXEL_CLUT8},&with,0,0u};
+    BmFrame b={{BM_SCREEN_WIDTH,BM_SCREEN_HEIGHT,BM_PIXEL_CLUT8},&without,0,0u};
+    unsigned players=0,checked=0,outside=0,inside=0,k;
+    bm_game_boot(&game,7u);
+    for(f=0;f<4000u;++f){
+      in.fire=(f%300u)<20u;bm_game_tick(&game,&in);
+      if(game.mode!=BM_STATE_PLAYING||f%97u)continue;
+      bm_sprite_hd_mask=0u;bm_renderer_classic.render(&game,&a);
+      for(players=0,k=0;k<bm_sprite_list.count;++k){
+        const BmSpriteDraw *d=&bm_sprite_list.draw[k];
+        if(d->kind!=BM_SPRITE_PLAYER)continue;
+        ++players;
+        if(d->x!=game.player.x-8||d->y!=game.player.y-5)++outside;
+      }
+      if(players!=1u)++outside;
+      bm_sprite_hd_mask=1u<<BM_SPRITE_PLAYER;bm_renderer_classic.render(&game,&b);
+      bm_sprite_hd_mask=0u;
+      for(players=0,k=0;k<bm_sprite_list.count;++k)
+        players+=bm_sprite_list.draw[k].kind==BM_SPRITE_PLAYER;
+      if(players!=1u)++outside;
+      for(y=0;y<BM_SCREEN_HEIGHT;++y)for(x=0;x<BM_SCREEN_WIDTH;++x){
+        int box=(int)x>=game.player.x-8&&(int)x<game.player.x+8&&
+                (int)y>=game.player.y-5&&(int)y<game.player.y+5;
+        if(with.pixels[y*BM_SCREEN_WIDTH+x]==without.pixels[y*BM_SCREEN_WIDTH+x])continue;
+        if(box)++inside;else ++outside;
+      }
+      ++checked;
+    }
+    check(checked>0u&&!outside,"sprite list: one player entry; masking only changes its box");
+    check(inside>0u,"masking the player removes it from the classic picture");
+  }
   if(failures){printf("%d render test(s) failed\n",failures);return 1;}
   printf("render tests passed\n");return 0;
 }

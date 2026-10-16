@@ -18,6 +18,18 @@ uint32_t bm_profile_total[BM_PROFILE_SLOTS],bm_profile_count[BM_PROFILE_SLOTS];
 #ifndef BM_ATARI_FLIGHT
 #define BM_ATARI_FLIGHT 0
 #endif
+BmSpriteList bm_sprite_list;
+uint32_t bm_sprite_hd_mask;
+/* Records an object; 1 if the classic renderer draws it itself. */
+static int sprite(unsigned kind,unsigned variant,int x,int y,unsigned colour,
+                  unsigned behind){
+  if(bm_sprite_list.count<BM_SPRITE_DRAW_MAX){
+    BmSpriteDraw *d=&bm_sprite_list.draw[bm_sprite_list.count++];
+    d->kind=(uint8_t)kind;d->variant=(uint8_t)variant;d->colour=(uint8_t)colour;
+    d->behind=(uint8_t)behind;d->x=(int16_t)x;d->y=(int16_t)y;
+  }
+  return !(bm_sprite_hd_mask&(1u<<kind));
+}
 static void px(BmFramebuffer *f,int x,int y,uint8_t c){
   if((unsigned)x<BM_SCREEN_WIDTH&&(unsigned)y<BM_SCREEN_HEIGHT)f->pixels[y*BM_SCREEN_WIDTH+x]=c;
 }
@@ -28,6 +40,7 @@ static void draw_gun_shot(BmFramebuffer *f,uint8_t atari_x,uint8_t atari_y,
   int y=bm_pm_y(atari_y);
   int dx,dy,width=4,height=2;
   if(!atari_y)return;
+  if(!sprite(BM_SPRITE_GUN_SHOT,explosion?1u:0u,x,explosion?y-4:y,0u,0u))return;
   if(explosion){
     /* FBRGN/FM2GN replace the two missile scanlines with four staggered
        scanlines for 25 frames.  Adjacent Atari missile lanes are one
@@ -512,6 +525,7 @@ static void options_screen(BmFramebuffer *f,const BmGame *g){
 /* The classic renderer: the Atari picture into a 320x200 CLUT8 framebuffer. */
 static void classic_render(const BmGame*g,BmFramebuffer*f){
   int x,y,p=g->player.x,q=g->player.y;palette(f,g);
+  bm_sprite_list.count=0u;
   if(g->mode==BM_STATE_OPTIONS){options_screen(f,g);return;}
 #if BM_CLASSIC_TEST_PAGE
   static const BmAntic4Zone classic_zones[]={
@@ -617,12 +631,15 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
        lines lower; C1 starts at 15, above the playfield. */
     int ship_x=bm_pm_x(g->classic_world.ship_x);
     int ship_y=bm_pm_y((int)g->classic_world.ship_y-11);
-    if(g->classic_world.ship_destroyed)
-      /* Z6 writes XSHPIM to P2 rows C1-12..C1. */
-      bm_sprite_blit_colour(f,&destroyed_ship,ship_x,ship_y-1,31u);
-    else{
-      bm_sprite_blit_colour(f,&ship0,ship_x,ship_y,29u);
-      bm_sprite_blit_colour(f,&ship1,ship_x,ship_y+2,30u);
+    if(sprite(BM_SPRITE_SHIP,g->classic_world.ship_destroyed?1u:0u,ship_x,ship_y,
+              p2_colour(g),0u)){
+      if(g->classic_world.ship_destroyed)
+        /* Z6 writes XSHPIM to P2 rows C1-12..C1. */
+        bm_sprite_blit_colour(f,&destroyed_ship,ship_x,ship_y-1,31u);
+      else{
+        bm_sprite_blit_colour(f,&ship0,ship_x,ship_y,29u);
+        bm_sprite_blit_colour(f,&ship1,ship_x,ship_y+2,30u);
+      }
     }
   }
   if(g->classic_world.river_car_active){
@@ -639,11 +656,15 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
       body=g->classic_world.river_car_left?&car_left_body:&car_right_body;
       tyres=g->classic_world.river_car_left?&car_left_tyres:&car_right_tyres;
     }
-    if(g->classic_world.river_car_destroyed){
-      static const BmSprite wreck={bm_asset_crash,16,10,16,0,0};
-      bm_sprite_blit_colour(f,&wreck,car_x,car_y-1,32u);
-    }else bm_sprite_blit_colour(f,body,car_x,car_y,29u);
-    bm_sprite_blit_colour(f,tyres,car_x,car_y+1,30u);
+    if(sprite(BM_SPRITE_VEHICLE,(g->classic_world.river_vehicle_truck?1u:0u)|
+              (g->classic_world.river_car_left?2u:0u)|
+              (g->classic_world.river_car_destroyed?4u:0u),car_x,car_y,p2_colour(g),0u)){
+      if(g->classic_world.river_car_destroyed){
+        static const BmSprite wreck={bm_asset_crash,16,10,16,0,0};
+        bm_sprite_blit_colour(f,&wreck,car_x,car_y-1,32u);
+      }else bm_sprite_blit_colour(f,body,car_x,car_y,29u);
+      bm_sprite_blit_colour(f,tyres,car_x,car_y+1,30u);
+    }
   }
   if(g->classic_world.enemy_fighter_active){
     const BmWorldBuffer *w=&g->classic_world;
@@ -674,32 +695,38 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
     int fighter_x=bm_pm_x(w->enemy_fighter_x);
     int fighter_y=bm_pm_y(w->enemy_fighter_y);
     int shadow_y=bm_pm_y(w->enemy_fighter_shadow_y);
+    unsigned look=(w->enemy_fighter_forward?1u:0u)|
+                  (w->enemy_fighter_turn==1u?2u:w->enemy_fighter_turn==2u?4u:0u);
     if(w->enemy_fighter_destroyed){
       /* COLM02 -> DG writes XPL1IM to P2 rows C1-1..C1+10; P3 is cleared. */
       static const BmSprite wreck={
         bm_asset_explosion,16,BM_ASSET_EXPLOSION_HEIGHT,16,0,0
       };
-      bm_sprite_blit_colour(f,&wreck,fighter_x,fighter_y-1,29u);
+      if(sprite(BM_SPRITE_ENEMY,8u,fighter_x,fighter_y,p2_colour(g),0u))
+        bm_sprite_blit_colour(f,&wreck,fighter_x,fighter_y-1,29u);
     }else if(g->mode==BM_STATE_CRASHING&&g->flight_crash_colp02){
       /* CRSH/SK: with $655=0 the enemy P2 takes the crash colour. */
-      if(w->enemy_body_on){
+      if(w->enemy_body_on&&sprite(BM_SPRITE_ENEMY,look|16u,fighter_x,fighter_y,
+                                  p2_colour(g),0u)){
         const BmSprite *body=w->enemy_fighter_forward?&forward:&back;
         bm_sprite_blit_colour(f,body,fighter_x,fighter_y,
                               (g->flight_crash_timer&4u)?34u:33u);
       }
     }else if(!w->enemy_fighter_forward){
-      if(w->enemy_shadow_on)
+      if(w->enemy_shadow_on&&sprite(BM_SPRITE_ENEMY_SHADOW,0u,fighter_x,shadow_y,0u,0u))
         bm_sprite_blit_colour(f,&enemy_shadow,fighter_x,shadow_y,30u);
-      if(w->enemy_body_on)
+      if(w->enemy_body_on&&sprite(BM_SPRITE_ENEMY,look,fighter_x,fighter_y,p2_colour(g),0u))
         blit_p2(f,w->enemy_fighter_turn==1u?&bank_left:
                   (w->enemy_fighter_turn==2u?&bank_right:&back),
                 fighter_x,fighter_y);
     }else if(w->enemy_body_on){
-      blit_p2(f,w->enemy_fighter_turn==1u?&ftl:
-                (w->enemy_fighter_turn==2u?&ftr:&forward),
-              fighter_x,fighter_y);
+      if(sprite(BM_SPRITE_ENEMY,look,fighter_x,fighter_y,p2_colour(g),0u))
+        blit_p2(f,w->enemy_fighter_turn==1u?&ftl:
+                  (w->enemy_fighter_turn==2u?&ftr:&forward),
+                fighter_x,fighter_y);
     }else if(w->enemy_shadow_on){
-      bm_sprite_blit(f,&forward_p3,fighter_x,shadow_y);
+      if(sprite(BM_SPRITE_ENEMY_SHADOW,1u,fighter_x,shadow_y,0u,0u))
+        bm_sprite_blit(f,&forward_p3,fighter_x,shadow_y);
     }
   }
   if(g->classic_world.capital_y){
@@ -707,6 +734,7 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
     const BmWorldBuffer *w=&g->classic_world;
     int x0=bm_pm_x(w->capital_x),y0=bm_pm_y((int)w->capital_y+w->capital_shift-20);
     int xx,yy;
+    if(sprite(BM_SPRITE_CAPITAL_TARGET,0u,x0,y0,p2_colour(g),w->gprior==4u))
     for(yy=y0;yy<=y0+22&&yy<BM_ATARI_PLAYFIELD_HEIGHT;++yy)
       for(xx=x0;xx<x0+64;++xx){
         uint8_t cover,under;
@@ -719,7 +747,9 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
         f->pixels[yy*BM_SCREEN_WIDTH+xx]=cover==2u?29u:30u;
       }
   }
-  if(g->classic_world.enemy_fighter_shot_active)
+  if(g->classic_world.enemy_fighter_shot_active&&
+     sprite(BM_SPRITE_ENEMY_SHOT,0u,bm_pm_x(g->classic_world.enemy_fighter_shot_x),
+            bm_pm_y(g->classic_world.enemy_fighter_shot_y),p2_colour(g),0u))
     draw_screen_shot(f,bm_pm_x(g->classic_world.enemy_fighter_shot_x),
       bm_pm_y(g->classic_world.enemy_fighter_shot_y),0u,29u); /* M2 = COLPM2 */
   if(g->classic_world.target_sight_active){
@@ -727,7 +757,8 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
     /* GNSGHT writes the nine GNST rows to P2 ending at Y=$6AB. */
     int sight_x=bm_pm_x(g->classic_world.target_sight_x);
     int sight_y=bm_pm_y((int)g->classic_world.target_sight_y-8);
-    bm_sprite_blit_colour(f,&sight,sight_x,sight_y,29u);
+    if(sprite(BM_SPRITE_GUNSIGHT,0u,sight_x,sight_y,p2_colour(g),0u))
+      bm_sprite_blit_colour(f,&sight,sight_x,sight_y,29u);
   }
 #endif
   /* LAND clears the Atari shadow state before entering GROUND. A subsequent
@@ -737,7 +768,14 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
   if(g->mode!=BM_STATE_GROUND&&g->mode!=BM_STATE_CRASHING&&
      g->mode!=BM_STATE_RANKING&&g->mode!=BM_STATE_GAME_OVER&&
      !(g->flight_service_phase&&g->player.altitude<=3)&&
-     !g->classic_world.shadow_hidden){         /* PRIOR: SHBNE */
+     !g->classic_world.shadow_hidden&&         /* PRIOR: SHBNE */
+     sprite(BM_SPRITE_SHADOW,g->shadow_far?1u:0u,p-8,q+g->player.altitude-5,0u,
+#if BM_CLASSIC_TEST_PAGE
+            g->classic_world.gprior==4u
+#else
+            0u
+#endif
+            )){
 #if BM_CLASSIC_TEST_PAGE
     /* SHCOL: P1 colour 705=2 for the thin far shadow, else 0. */
     f->palette[40]=bm_atari_pal_rgb[2];
@@ -765,10 +803,21 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
       if(yy>=q-7&&yy<q-7+BM_ASSET_EXPLOSION_HEIGHT)continue;
       for(c=0;c<16;++c)if(bm_game_shadow_pixels(g)[r*16+c])px(f,p1-8+c,yy,colour);
     }
-    bm_sprite_blit_colour(f,&player_crash,p-g->flight_crash_spread,q,colour);
-    bm_sprite_blit_colour(f,&player_crash,p1,q,colour);
+    if(sprite(BM_SPRITE_PLAYER_CRASH,0u,p-g->flight_crash_spread-8,q-7,0u,0u))
+      bm_sprite_blit_colour(f,&player_crash,p-g->flight_crash_spread,q,colour);
+    if(sprite(BM_SPRITE_PLAYER_CRASH,1u,p1-8,q-7,0u,0u))
+      bm_sprite_blit_colour(f,&player_crash,p1,q,colour);
   }else if(g->mode!=BM_STATE_CRASHING&&g->mode!=BM_STATE_RANKING&&
-           !(g->mode==BM_STATE_GAME_OVER&&g->flight_crash_reason)){
+           !(g->mode==BM_STATE_GAME_OVER&&g->flight_crash_reason)&&
+           sprite(BM_SPRITE_PLAYER,
+                  (g->player.bank<0?2u:g->player.bank>0?4u:0u)|((g->tick&2u)?0u:1u),
+                  p-8,q-5,0u,
+#if BM_CLASSIC_TEST_PAGE
+                  g->classic_world.gprior==4u
+#else
+                  0u
+#endif
+                  )){
 #if BM_CLASSIC_TEST_PAGE
     if(g->classic_world.gprior==4u)blit_behind_playfield(f,plane,p,q,26);
     else bm_sprite_blit_colour(f,plane,p,q,26);
@@ -776,7 +825,8 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
     bm_sprite_blit(f,plane,p,q);
 #endif
   }
-  if(g->player_shot_active){
+  if(g->player_shot_active&&
+     sprite(BM_SPRITE_PLAYER_SHOT,0u,g->player_shot_x,g->player_shot_y,0u,0u)){
     for(y=0;y<1;y++)for(x=0;x<4;x++)
       px(f,g->player_shot_x+x,g->player_shot_y+y,
 #if BM_CLASSIC_TEST_PAGE
@@ -786,7 +836,8 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
 #endif
       );
   }
-  if(g->player_bomb_active){
+  if(g->player_bomb_active&&
+     sprite(BM_SPRITE_BOMB,g->player_bomb_phase,g->player_bomb_x,g->player_bomb_y,0u,0u)){
     uint8_t colour=
 #if BM_CLASSIC_TEST_PAGE
       28u;
@@ -802,7 +853,10 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
       bm_asset_explosion,16,BM_ASSET_EXPLOSION_HEIGHT,16,0,0
     };
     /* XPL1IM is centred around the missile impact in the original PM image. */
-    if(g->player_bomb_water_splash)
+    if(!sprite(BM_SPRITE_BOMB_EXPLOSION,g->player_bomb_water_splash?1u:0u,
+               g->player_bomb_explosion_x-6,
+               g->player_bomb_explosion_y-(g->player_bomb_water_splash?9:6),0u,0u)){}
+    else if(g->player_bomb_water_splash)
       bm_sprite_blit_colour(f,&bomb_explosion,g->player_bomb_explosion_x-6,
                             g->player_bomb_explosion_y-9,
 #if BM_CLASSIC_TEST_PAGE
