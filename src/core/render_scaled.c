@@ -13,9 +13,9 @@ static void scaled_render(const BmGame *g,BmFrame *frame){
   BmFrame source={{BM_SCREEN_WIDTH,BM_SCREEN_HEIGHT,BM_PIXEL_CLUT8},&classic,0,0u};
   uint32_t pair[BM_PALETTE_SIZE];
   unsigned x,y,i;
-  uint32_t profile=bm_profile_start();
+  uint32_t profile;
   bm_renderer_classic.render(g,&source);
-  bm_profile_stop(BM_PROFILE_CLASSIC,profile);profile=bm_profile_start();
+  profile=bm_profile_start();
   for(i=0;i<BM_PALETTE_SIZE;++i){
     uint32_t c=rgb565(classic.palette[i]);pair[i]=c<<16|c;
   }

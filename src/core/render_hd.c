@@ -53,9 +53,9 @@ static void hd_render(const BmGame *g,BmFrame *frame){
   int x0=(w->quake_shift?-2:0)+w->fine_phase*2-8,y0=-(int)w->fine_phase*2;
   unsigned x,y,i,any=0u;
   if(!packed_ready)pack_textures();
-  uint32_t profile=bm_profile_start();
+  uint32_t profile;
   bm_renderer_classic.render(g,&source);
-  bm_profile_stop(BM_PROFILE_CLASSIC,profile);profile=bm_profile_start();
+  profile=bm_profile_start();
   for(i=0;i<BM_PALETTE_SIZE;++i){uint32_t c=rgb565(classic.palette[i]);pair[i]=c<<16|c;}
   /* XFLSH swaps the playfield colours: keep the flash flat.  The OPTION
      screen is text. */

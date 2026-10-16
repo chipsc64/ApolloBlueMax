@@ -9,6 +9,7 @@
 #include <proto/timer.h>
 #include <devices/timer.h>
 #include <exec/interrupts.h>
+#include <exec/memory.h>
 #include <hardware/intbits.h>
 
 #define REG16(address) (*(volatile uint16_t *)(uintptr_t)(address))
@@ -75,6 +76,9 @@ static uint32_t eclock_hz;
 static uint64_t eclock64(void){
     struct EClockVal v;ReadEClock(&v);return((uint64_t)v.ev_hi<<32)|v.ev_lo;
 }
+#if BM_SOUND_TEST
+static uint32_t eclock_low(void){return (uint32_t)eclock64();}
+#endif
 
 typedef struct {
     uint8_t storage[VIDEO_BUFFERS][MAX_FRAME_BYTES+63];
@@ -137,7 +141,7 @@ static int saga_open(BmPlatform *p,const BmFrame *frame){
     memset(&saga,0,sizeof(saga));
     timer_open(&saga);
 #if BM_SOUND_TEST
-    bm_profile_cycles=bm_cpu_cycles;
+    bm_profile_cycles=eclock_low;
 #endif
     saga.format=frame->format;saga.bytes=frame_bytes(&frame->format);
     for(i=0;i<VIDEO_BUFFERS;++i){
@@ -275,8 +279,10 @@ static void saga_acquire(BmPlatform *p,BmFrame *frame){
 static void saga_present(BmPlatform *p,const BmFrame *frame){
     SagaState *s=(SagaState*)p->userdata;
     if(frame->format.pixel==BM_PIXEL_CLUT8){
+        uint32_t profile=bm_profile_start();
         bm_ammx_copy8(s->video[s->drawing],frame->indexed->pixels,s->bytes);
         remember_palette(frame->indexed);
+        bm_profile_stop(BM_PROFILE_PRESENT,profile);
     }
     s->queued=s->drawing;
     if(s->timer_open&&s->draw_start){
@@ -349,10 +355,13 @@ static void saga_close(BmPlatform *p){
                 unsigned k;
                 printf("Blue Max cpu: %luMHz cache-misses=%lu/frame while drawing\n",
                     (unsigned long)mhz,(unsigned long)(s->draw_misses/s->draw_frames));
-                for(k=0;k<BM_PROFILE_SLOTS;++k)if(bm_profile_count[k]&&mhz)
-                    printf("Blue Max cycles: %s=%lu/frame (%luus)\n",k?"convert":"classic",
-                        (unsigned long)(bm_profile_total[k]/bm_profile_count[k]),
-                        (unsigned long)(bm_profile_total[k]/bm_profile_count[k]/mhz));
+                for(k=0;k<BM_PROFILE_SLOTS;++k)if(bm_profile_count[k])
+                    printf("Blue Max time: %s=%luus/frame\n",
+                        k==BM_PROFILE_CLASSIC?"classic":k==BM_PROFILE_CONVERT?"convert":"present",
+                        (unsigned long)((uint64_t)bm_profile_total[k]*1000000u/eclock_hz/bm_profile_count[k]));
+                printf("Blue Max memory: display buffers in %s RAM, game in %s RAM\n",
+                    (TypeOfMem(s->video[0])&MEMF_CHIP)?"chip":"fast",
+                    (TypeOfMem((void *)s)&MEMF_CHIP)?"chip":"fast");
             }
             if(s->draw_frames)
                 printf("Blue Max draw: %ux%u render+present=%luus/frame max=%luus\n",

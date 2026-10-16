@@ -1,5 +1,8 @@
 #include "bm_game.h"
 #include "bm_renderer.h"
+#include "bm_profile.h"
+uint32_t (*bm_profile_cycles)(void);
+uint32_t bm_profile_total[BM_PROFILE_SLOTS],bm_profile_count[BM_PROFILE_SLOTS];
 #include "bm_sprite.h"
 #include "bm_tile.h"
 #include "bm_chbas_assets.h"
@@ -843,7 +846,9 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
 #endif
 }
 static void classic_render_frame(const BmGame*g,BmFrame*frame){
+  uint32_t profile=bm_profile_start();
   classic_render(g,frame->indexed);
+  bm_profile_stop(BM_PROFILE_CLASSIC,profile);
 }
 const BmRenderer bm_renderer_classic={
   "classic",{BM_SCREEN_WIDTH,BM_SCREEN_HEIGHT,BM_PIXEL_CLUT8},classic_render_frame
