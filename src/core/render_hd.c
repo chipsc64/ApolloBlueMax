@@ -64,13 +64,39 @@ static void hd_render(const BmGame *g,BmFrame *frame){
         line_bottom[BM_CLASSIC_INITIAL_BASE+i]=t?t+row+BM_ART_TILE/2u:0;
       }
     }
+    /* Tiles start at x0 + 8k.  Pixels before the first whole tile and
+       after the last one go one by one; a whole tile whose eight pixels
+       share one index is copied from its texture row (or filled), the rest
+       of the mixed tiles go one by one. */
     phase=(unsigned)(-x0)&7u;            /* (x - x0) & 7 at x = 0 */
-    for(x=0;x<BM_SCREEN_WIDTH;++x){
-      uint8_t index=in[x];
-      const uint32_t *t=line_top[index];
-      if(t){top[x]=t[phase];bottom[x]=line_bottom[index][phase];}
-      else{uint32_t v=pair[index];top[x]=v;bottom[x]=v;}
-      phase=(phase+1u)&7u;
+    x=0u;
+    while(x<BM_SCREEN_WIDTH){
+      if(!phase&&x+8u<=BM_SCREEN_WIDTH){
+        uint32_t a,b,same;
+        memcpy(&a,in+x,4u);memcpy(&b,in+x+4u,4u);
+        same=(uint32_t)in[x]*0x01010101u;
+        if(a==same&&b==same){
+          const uint32_t *t=line_top[in[x]];
+          uint32_t *o=top+x,*u=bottom+x;
+          if(t){
+            const uint32_t *v=line_bottom[in[x]];
+            o[0]=t[0];o[1]=t[1];o[2]=t[2];o[3]=t[3];o[4]=t[4];o[5]=t[5];o[6]=t[6];o[7]=t[7];
+            u[0]=v[0];u[1]=v[1];u[2]=v[2];u[3]=v[3];u[4]=v[4];u[5]=v[5];u[6]=v[6];u[7]=v[7];
+          }else{
+            uint32_t c=pair[in[x]];
+            o[0]=o[1]=o[2]=o[3]=o[4]=o[5]=o[6]=o[7]=c;
+            u[0]=u[1]=u[2]=u[3]=u[4]=u[5]=u[6]=u[7]=c;
+          }
+          x+=8u;
+          continue;
+        }
+      }
+      { uint8_t index=in[x];
+        const uint32_t *t=line_top[index];
+        if(t){top[x]=t[phase];bottom[x]=line_bottom[index][phase];}
+        else{uint32_t v=pair[index];top[x]=v;bottom[x]=v;}
+      }
+      ++x;phase=(phase+1u)&7u;
     }
   }
 }
