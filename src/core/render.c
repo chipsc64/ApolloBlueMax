@@ -402,6 +402,10 @@ static uint8_t p2_colour(const BmGame *g){
   /* TRGTP2 (COMMON): $7C/$A8 alternate on bit 3 of $604. */
   if(w->p2_colour==0x7cu||w->p2_colour==0xa8u)
     return (w->vbi_counter&8u)?0x7cu:0xa8u;
+  /* CPTL's third target is $60, purple on an NTSC Atari; in the PAL
+     palette it looks as blue as the second ($70), so show PAL's purple
+     ($50).  Display only: the game keeps 96 to score the target. */
+  if(w->capital_y&&!w->capital_wreck&&w->p2_colour==0x60u)return 0x50u;
   return w->p2_colour;
 }
 /* Enemy composites carry their P3 pixels as colour 9; every other pixel
