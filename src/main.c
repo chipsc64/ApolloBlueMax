@@ -34,6 +34,9 @@ static void sound_test(BmPokey *k){
   ++frame;
 }
 #endif
+#ifndef BM_SOUND_SAMPLES
+#define BM_SOUND_SAMPLES 0
+#endif
 int main(void) {
   static BmGame game; BmPlatform platform=bm_platform_create(); BmInput input={0};
   BmPokey *const pokeys[6]={&game.pokey,&game.pokey_extra[0],&game.pokey_extra[1],
@@ -53,7 +56,8 @@ int main(void) {
 #if BM_SOUND_TEST
     sound_test(&game.pokey);
 #endif
-    if(platform.audio_tick) platform.audio_tick(&platform,pokeys,BM_ENHANCED_SOUND?6u:1u);
+    if(platform.audio_tick)
+      platform.audio_tick(&platform,pokeys,BM_ENHANCED_SOUND?6u:1u,BM_SOUND_SAMPLES?&game.mixer:0);
     due=platform.wait_vblank(&platform);
   }
   platform.close(&platform); return 0;

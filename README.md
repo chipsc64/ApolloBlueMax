@@ -96,6 +96,7 @@ Add an option to build a variant:
 | (none) | `bluemax-apollo` | the original game, 60 updates per second (NTSC) |
 | `ENHANCED_SOUND=1` | `bluemax-apollo-enhanced-sound` | sounds no longer cut each other off (not original) |
 | `TICK_RATE=50` | `bluemax-apollo-50hz` | PAL tempo: 50 updates per second, PAL POKEY clock |
+| `SOUND=samples` | `bluemax-apollo-samples` | sounds with a sample in `sounds/` play it instead of their POKEY sound (see below) |
 | `DEBUG_HUD=1` | `bluemax-apollo-debug` | developer HUD instead of the status line |
 | `CAPITAL_TEST=1` | `bluemax-apollo-capital-test1` | test aid: start near the capital |
 | `CAPITAL_TEST=2` | `bluemax-apollo-capital-test2` | as above, two capital targets already destroyed |
@@ -172,6 +173,22 @@ the bomb each get their own POKEY. All of them are mixed into the SAGA
 stream, so the sounds play together. The default build keeps the original
 behaviour.
 
+### Samples (`SOUND=samples`)
+
+With `SOUND=samples` a game sound plays a recorded sample instead of its
+POKEY routine when `sounds/NAME.wav` exists; every other sound stays the
+original POKEY sound. The samples are mixed in software into the same
+44.3 kHz stream as the POKEY. WAV files must be PCM, 8 or 16 bit, mono or
+stereo, at any rate (44100 Hz recommended), at most 10 seconds;
+`tools/sound_assets.py` converts them during the build.
+
+| NAME | Sound |
+|---|---|
+| `gun_own` | the player's machine gun: one shot, looped while firing |
+
+`sounds/gun_own.wav` is a generated example (`tools/make_example_sounds.py`);
+replace it with a real recording. More sounds follow.
+
 ### 50 Hz
 
 The default build runs one game update per vertical blank. On the V4's
@@ -205,13 +222,14 @@ src/core/           portable game code: game.c, world.c, flight.c, collision.c,
                     render.c (classic renderer), render_scaled.c, render_hd.c,
                     renderer.c,
                     sprite.c, tile.c,
-                    pokey.c, sound.c
+                    pokey.c, sound.c, mixer.c
 src/main.c          main loop
 platform/apollo/    SAGA video, audio, input and the AMMX blitter
 platform/headless/  backend for tests and the headless build
 tests/              host tests
-tools/              asset, tune and art conversion, status font, snapshots
+tools/              asset, tune, art and sound conversion, status font, snapshots
 art/                upgraded graphics for RENDERER=hd
+sounds/             samples for SOUND=samples
 ```
 
 ## How it works

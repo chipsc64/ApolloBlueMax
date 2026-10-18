@@ -73,6 +73,7 @@ typedef struct {
      the bomb, mixed with the main one so that they no longer cut off. */
   BmPokey pokey_extra[5];
   BmSoundOut sound_out;   /* routing to the POKEYs, refreshed before use */
+  BmMixer mixer;          /* SOUND=samples: the sample voices */
 } BmGame;
 void bm_game_init(BmGame *, uint32_t seed);
 /* Power on as the original: EXXON.0 sets $6F3 and enters the attract mode. */

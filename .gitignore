@@ -18,6 +18,7 @@ docs/
 *.mp4
 *.mkv
 *.wav
+!sounds/*.wav
 
 # Original Blue Max source and binaries: clone them from
 # https://gitlab.com/atari/bluemax instead (see README.md)

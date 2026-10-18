@@ -28,5 +28,5 @@ static uint32_t frame_checksum(const BmFrame*f){
 static void present(BmPlatform*p,const BmFrame*f){State*s=(State*)p->userdata;if(s->frames%50u==0)printf("frame=%u checksum=%08lx\n",s->frames,(unsigned long)frame_checksum(f));s->frames++;}
 static void noop(BmPlatform*p){(void)p;}
 static unsigned onetick(BmPlatform*p){(void)p;return 1u;}
-static void noaudio(BmPlatform*p,BmPokey*const*k,unsigned n){(void)p;(void)k;(void)n;}
+static void noaudio(BmPlatform*p,BmPokey*const*k,unsigned n,BmMixer*m){(void)p;(void)k;(void)n;(void)m;}
 BmPlatform bm_platform_create(void){BmPlatform p={0};p.open=openp;p.poll_input=poll;p.acquire=acquire;p.present=present;p.audio_tick=noaudio;p.wait_vblank=onetick;p.close=noop;return p;}

@@ -1,5 +1,7 @@
 #include "bm_pokey.h"
 #include "bm_sound.h"
+#include "bm_mixer.h"
+#include "bm_sound_assets.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -114,6 +116,46 @@ int main(void){
     for(n=1;bm_sound_music_tick(&snd,&k);++n){}
     check(n+1u==2713u&&!snd.music_on&&!k.audc[0]&&!k.audc[1]&&!k.audc[2],
           "PLAY.IT length and STOP.SN");
+  }
+  /* T37a: the sample mixer. */
+  { static const int16_t ramp[4]={1000,2000,3000,4000};
+    static const BmSample once={ramp,4u,RATE},slow={ramp,4u,RATE/2u};
+    BmMixer m;int16_t out[12];unsigned n;
+    bm_mixer_reset(&m);
+    for(n=0;n<12u;++n)out[n]=100;
+    bm_mixer_play(&m,0u,&once,0u,256u);bm_mixer_render(&m,out,12u,RATE);
+    check(out[0]==1100&&out[3]==4100&&out[4]==100&&!bm_mixer_active(&m,0u),
+          "mixer: a sample once, added to the output");
+    for(n=0;n<12u;++n)out[n]=0;
+    bm_mixer_play(&m,0u,&once,1u,128u);bm_mixer_render(&m,out,10u,RATE);
+    check(out[4]==500&&out[9]==1000&&bm_mixer_active(&m,0u),"mixer: loop at half volume");
+    bm_mixer_release(&m,0u);bm_mixer_render(&m,out,10u,RATE);
+    check(!bm_mixer_active(&m,0u),"mixer: a released loop ends with its pass");
+    for(n=0;n<12u;++n)out[n]=0;
+    bm_mixer_play(&m,1u,&slow,0u,256u);bm_mixer_render(&m,out,8u,RATE);
+    check(out[0]==1000&&out[1]==1000&&out[2]==2000&&out[7]==4000,"mixer: rate conversion");
+    for(n=0;n<12u;++n)out[n]=32000;
+    bm_mixer_play(&m,1u,&once,0u,256u);bm_mixer_render(&m,out,4u,RATE);
+    check(out[0]==32767,"mixer: saturation");
+  }
+  /* T37a: with a gun_own sample the own gun loops it and channel 4 stays
+     silent; the end releases it.  Enemy fire stays POKEY. */
+  if(bm_samples[BM_SAMPLE_GUN_OWN]){
+    BmSound snd;BmMixer m;BmSoundOut o;unsigned g,n;
+    for(g=0;g<BM_SOUND_GROUPS;++g)o.pokey[g]=&k;
+    o.separate=0u;o.mixer=&m;
+    bm_pokey_reset(&k);bm_sound_reset(&snd);bm_mixer_reset(&m);
+    bm_sound_event_own_shot(&snd);
+    for(n=0;n<8u;++n)bm_sound_event_update(&snd,&o);
+    check(bm_mixer_active(&m,BM_VOICE_GUN)&&m.voice[BM_VOICE_GUN].loop&&k.audc[3]==0u,
+          "own gun: sample loops, POKEY channel 4 silent");
+    bm_sound_event_shot_end(&snd);bm_sound_event_update(&snd,&o);
+    check(!m.voice[BM_VOICE_GUN].loop&&snd.gun==0u&&k.audc[3]==0u,"own gun: released at RO");
+    bm_sound_event_enemy_shot(&snd);for(n=0;n<4u;++n)bm_sound_event_update(&snd,&o);
+    check(k.audc[3]!=0u,"enemy gun stays POKEY");
+    o.mixer=0;bm_pokey_reset(&k);bm_sound_reset(&snd);
+    bm_sound_event_own_shot(&snd);for(n=0;n<4u;++n)bm_sound_event_update(&snd,&o);
+    check(k.audc[3]!=0u,"without the mixer the own gun is POKEY");
   }
   if(failures){printf("%d pokey test(s) failed\n",failures);return 1;}
   printf("pokey tests passed\n");return 0;

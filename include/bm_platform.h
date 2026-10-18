@@ -2,6 +2,7 @@
 #define BM_PLATFORM_H
 #include <stdint.h>
 #include "bm_pokey.h"
+#include "bm_mixer.h"
 enum { BM_SCREEN_WIDTH=320, BM_SCREEN_HEIGHT=200, BM_PALETTE_SIZE=256, BM_TICK_HZ=50 };
 /* start/select/option: the Atari console keys (CONSOL, location 53279). */
 typedef struct { int8_t x,y; uint8_t fire,bomb,pause,quit,start,select,option; } BmInput;
@@ -22,7 +23,8 @@ struct BmPlatform {
   void (*acquire)(BmPlatform *, struct BmFrame *);
   void (*present)(BmPlatform *, const struct BmFrame *);
   /* The POKEYs to mix: one, or six with ENHANCED_SOUND. */
-  void (*audio_tick)(BmPlatform *, BmPokey *const *, unsigned);
+  /* The POKEYs' output plus the sample voices (mixer may be 0). */
+  void (*audio_tick)(BmPlatform *, BmPokey *const *, unsigned, BmMixer *);
   /* Waits for the next vblank; returns the game updates due (one per
      vblank, or paced to TICK_RATE=50 by the platform clock: 0..2). */
   unsigned (*wait_vblank)(BmPlatform *);

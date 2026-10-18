@@ -94,6 +94,7 @@ typedef struct {
     int16_t *ring,mono[AUDIO_CHUNK],extra[AUDIO_CHUNK];
     BmPokey *const *pokeys;
     unsigned pokey_count;
+    BmMixer *mixer;                  /* SOUND=samples: sample voices */
     uint64_t audio_t0,audio_written; /* E-clock at sample 0; samples written */
     uint64_t ticks_t0,ticks_done;    /* TICK_RATE=50: E-clock pacing */
     uint8_t audio_on,audio_failed,audio_intena,timer_open;
@@ -258,6 +259,7 @@ static void audio_write(SagaState *s){
                 }
             }
         }else memset(s->mono,0,n*sizeof(int16_t));
+        if(s->mixer)bm_mixer_render(s->mixer,s->mono,n,AUDIO_RATE);
         for(i=0;i<n;++i){out[2*i]=s->mono[i];out[2*i+1]=s->mono[i];}
         s->audio_written+=n;s->render_samples+=n;
     }
@@ -334,11 +336,13 @@ static unsigned saga_wait_vblank(BmPlatform *p){
 #endif
     return 1u;
 }
-static void saga_audio_tick(BmPlatform *p,BmPokey *const *pokeys,unsigned count){
+static void saga_audio_tick(BmPlatform *p,BmPokey *const *pokeys,unsigned count,
+                            BmMixer *mixer){
     SagaState *s=(SagaState*)p->userdata;
     if(!s->audio_on&&!s->audio_failed)audio_start(s);
     if(!s->audio_on)return;
-    s->pokeys=pokeys;s->pokey_count=count;audio_signal(s,0);audio_write(s);
+    s->pokeys=pokeys;s->pokey_count=count;s->mixer=mixer;
+    audio_signal(s,0);audio_write(s);
 }
 static void saga_close(BmPlatform *p){
     SagaState *s=(SagaState*)p->userdata;

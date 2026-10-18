@@ -15,6 +15,9 @@
 #if !BM_ATARI_FLIGHT
 static int16_t clamp16(int16_t v,int16_t lo,int16_t hi){return v<lo?lo:(v>hi?hi:v);}
 #endif
+#ifndef BM_SOUND_SAMPLES
+#define BM_SOUND_SAMPLES 0
+#endif
 /* Sound output: one POKEY for every group, or (ENHANCED_SOUND) one each.
    The game only raises bm_sound_event_* events; it never writes POKEY
    registers itself. */
@@ -23,6 +26,7 @@ static const BmSoundOut *sound_out(BmGame *g){
   for(i=0;i<BM_SOUND_GROUPS;++i)
     g->sound_out.pokey[i]=(BM_ENHANCED_SOUND&&i)?&g->pokey_extra[i-1u]:&g->pokey;
   g->sound_out.separate=(uint8_t)BM_ENHANCED_SOUND;
+  g->sound_out.mixer=BM_SOUND_SAMPLES?&g->mixer:0;
   return &g->sound_out;
 }
 /* EXXON.0 EB: in the attract mode ($6F3) PLAY.IT runs first and AFY waits

@@ -208,6 +208,7 @@ void bm_sound_event_takeoff_engine(BmSound *s,const BmSoundOut *o){       /* AFX
 }
 void bm_sound_event_quiet(const BmSoundOut *o){
   unsigned g;for(g=0;g<BM_SOUND_GROUPS;++g)bm_sound_quiet(group(o,g));
+  if(o->mixer)bm_mixer_reset(o->mixer);
 }
 void bm_sound_event_demo_music(BmSound *s,const BmSoundOut *o){
   bm_sound_quiet(main_pokey(o));bm_sound_music_start(s);
@@ -232,6 +233,7 @@ void bm_sound_event_crash(BmSound *s,const BmSoundOut *o){
   bm_sound_event_explosion(s,o,BM_EXPLOSION_CRASH);
   bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,0u);
   for(g=BM_SOUND_MAIN;g<=BM_SOUND_BEEP;++g)bm_pokey_write(group(o,g),BM_POKEY_AUDC4,0u);
+  if(o->mixer){bm_mixer_stop(o->mixer,BM_VOICE_GUN);s->gun_sample=0u;}
 }
 
 void bm_sound_event_engine(BmSound *s,const BmSoundOut *o,uint8_t stick){
@@ -258,8 +260,44 @@ void bm_sound_event_shot_end(BmSound *s){s->gun=255u;}
 void bm_sound_event_ground_gun(BmSound *s){s->ground_gun=12u;}
 void bm_sound_event_runway(BmSound *s){s->runway=0x19u;}
 
+/* SOUND=samples: the sample (or 0) for a sound, and its level (256 = full
+   scale) next to the original POKEY sound.  Tune on the V4. */
+#ifndef BM_SOUND_SAMPLES
+#define BM_SOUND_SAMPLES 0
+#endif
+#if BM_SOUND_SAMPLES
+/* Only here: the m68k compiler keeps unused constant tables. */
+#include "bm_sound_assets.h"
+typedef char bm_sample_ids_check[(int)BM_SAMPLE_FILES==(int)BM_SAMPLE_COUNT?1:-1];
+#endif
+static const BmSample *sample(const BmSoundOut *o,BmSampleId id){
+#if BM_SOUND_SAMPLES
+  return o->mixer?bm_samples[id]:0;
+#else
+  (void)o;(void)id;return 0;  /* the samples stay out of the binary */
+#endif
+}
+enum { GAIN_GUN_OWN=56 };
+/* The own gun ($648=3) loops its sample while it fires.  The POKEY's
+   channel 4 stays silent meanwhile; RO's tail (255/254) is not needed. */
+static void gun_samples(BmSound *s,const BmSoundOut *o){
+  const BmSample *gun=sample(o,BM_SAMPLE_GUN_OWN);
+  if(!gun)return;
+  if(s->gun==3u){
+    if(!s->gun_sample||!bm_mixer_active(o->mixer,BM_VOICE_GUN)){
+      bm_pokey_write(group(o,BM_SOUND_GUN),BM_POKEY_AUDC4,0u);
+      bm_mixer_play(o->mixer,BM_VOICE_GUN,gun,1u,GAIN_GUN_OWN);
+      s->gun_sample=1u;
+    }
+  }else if(s->gun_sample){
+    bm_mixer_release(o->mixer,BM_VOICE_GUN);
+    s->gun_sample=0u;
+    if(s->gun>=254u)s->gun=0u;
+  }
+}
 void bm_sound_event_update(BmSound *s,const BmSoundOut *o){
-  bm_sound_gunsnd(s,group(o,BM_SOUND_GUN));
+  gun_samples(s,o);
+  if(!s->gun_sample)bm_sound_gunsnd(s,group(o,BM_SOUND_GUN));
   bm_sound_splash(s,group(o,BM_SOUND_BOMB));
   bm_sound_ggnsnd(s,group(o,BM_SOUND_GROUND_GUN));
   bm_sound_runsnd(s,group(o,BM_SOUND_BEEP));

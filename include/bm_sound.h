@@ -2,6 +2,7 @@
 #define BM_SOUND_H
 #include <stdint.h>
 #include "bm_pokey.h"
+#include "bm_mixer.h"
 /* EXXON.6 sound routines on the software POKEY, with their Atari RAM. */
 typedef struct {
   uint8_t engine;        /* $641: AUDC1 of the propeller roar ($C0..$C8) */
@@ -26,6 +27,7 @@ typedef struct {
   uint8_t music_on;      /* CDTMR1 ($218) running */
   uint8_t music_status[3],music_duration[3],music_volume[3],music_tie[3];
   uint16_t music_position[3];
+  uint8_t gun_sample;    /* SOUND=samples: the own gun plays its sample */
 } BmSound;
 void bm_sound_reset(BmSound *s);
 /* EXXON.6 XSND: once per VBI. */
@@ -70,7 +72,18 @@ void bm_sound_quiet(BmPokey *k);
    bomb. */
 enum { BM_SOUND_MAIN, BM_SOUND_GUN, BM_SOUND_GROUND_GUN, BM_SOUND_WARN,
   BM_SOUND_BEEP, BM_SOUND_BOMB, BM_SOUND_GROUPS };
-typedef struct { BmPokey *pokey[BM_SOUND_GROUPS]; uint8_t separate; } BmSoundOut;
+/* mixer (SOUND=samples): sounds with a sample in sounds/ play it there
+   instead of their POKEY routine; 0 = POKEY only. */
+typedef struct { BmPokey *pokey[BM_SOUND_GROUPS]; uint8_t separate; BmMixer *mixer; } BmSoundOut;
+/* The samples (sounds/NAME.wav, tools/sound_assets.py keeps this order)
+   and the mixer voice each sound uses. */
+typedef enum { BM_SAMPLE_ENGINE, BM_SAMPLE_ENGINE_DYING, BM_SAMPLE_ATTACKER_ENGINE,
+  BM_SAMPLE_GUN_OWN, BM_SAMPLE_GUN_ENEMY, BM_SAMPLE_GROUND_GUN, BM_SAMPLE_FLAK,
+  BM_SAMPLE_BOMB_WHISTLE, BM_SAMPLE_EXPLOSION_SMALL, BM_SAMPLE_EXPLOSION_MEDIUM,
+  BM_SAMPLE_EXPLOSION_LARGE, BM_SAMPLE_SPLASH, BM_SAMPLE_RUNWAY,
+  BM_SAMPLE_COUNT } BmSampleId;
+enum { BM_VOICE_ENGINE, BM_VOICE_ATTACKER, BM_VOICE_GUN, BM_VOICE_GROUND_GUN,
+  BM_VOICE_BOMB, BM_VOICE_EXPLOSION, BM_VOICE_SPLASH, BM_VOICE_RUNWAY };
 
 /* XXX callers, with their limit/volume. */
 typedef enum { BM_EXPLOSION_CRASH, BM_EXPLOSION_DAMAGE, BM_EXPLOSION_AIRCRAFT,
