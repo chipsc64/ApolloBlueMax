@@ -6,7 +6,7 @@
    bm_sound_event_* layer; the platform calls bm_mixer_render for every
    block of samples it renders. */
 typedef struct { const int16_t *data; uint32_t length,rate; } BmSample;
-enum { BM_MIXER_VOICES=8 };
+enum { BM_MIXER_VOICES=10 };
 typedef struct {
   const BmSample *sample;
   uint32_t index,frac;   /* position: index + frac/65536 */

@@ -196,6 +196,41 @@ uint8_t bm_sound_music_tick(BmSound *s,BmPokey *k){
 static BmPokey *group(const BmSoundOut *o,unsigned g){return o->pokey[g];}
 static BmPokey *main_pokey(const BmSoundOut *o){return o->pokey[BM_SOUND_MAIN];}
 
+/* SOUND=samples: the sample (or 0) for a sound and its level (256 = full
+   scale) next to the original POKEY sounds.  A sound without a sample
+   keeps its POKEY routine.  Tune the levels on the V4. */
+#ifndef BM_SOUND_SAMPLES
+#define BM_SOUND_SAMPLES 0
+#endif
+#if BM_SOUND_SAMPLES
+/* Only here: the m68k compiler keeps unused constant tables. */
+#include "bm_sound_assets.h"
+typedef char bm_sample_ids_check[(int)BM_SAMPLE_FILES==(int)BM_SAMPLE_COUNT?1:-1];
+#endif
+static const BmSample *sample(const BmSoundOut *o,BmSampleId id){
+#if BM_SOUND_SAMPLES
+  return o->mixer?bm_samples[id]:0;
+#else
+  (void)o;(void)id;return 0;  /* the samples stay out of the binary */
+#endif
+}
+/* Levels for the example samples: about 1.2x the POKEY sound's loudness
+   (the own gun 1.9x, approved on the V4); retune for real recordings. */
+static const uint16_t sample_gain[BM_SAMPLE_COUNT]={
+  128u,128u,128u,  /* engine, engine_dying, attacker_engine (T37c) */
+  96u,54u,          /* gun_own, gun_enemy */
+  75u,73u,          /* ground_gun, flak */
+  14u,              /* bomb_whistle: the original whistle is soft */
+  134u,213u,190u,   /* explosion_small, _medium, _large */
+  72u,100u};        /* splash, runway */
+/* Play a sample once (or looped) on a voice; 0 if there is none. */
+static int play(const BmSoundOut *o,BmSampleId id,unsigned voice,uint8_t loop){
+  const BmSample *x=sample(o,id);
+  if(!x)return 0;
+  bm_mixer_play(o->mixer,voice,x,loop,sample_gain[id]);
+  return 1;
+}
+
 void bm_sound_event_power_on(BmSound *s,const BmSoundOut *o){
   bm_pokey_write(main_pokey(o),BM_POKEY_SKCTL,3u);
   bm_pokey_write(main_pokey(o),BM_POKEY_AUDF1,251u);
@@ -222,18 +257,26 @@ uint8_t bm_sound_event_vblank(BmSound *s,const BmSoundOut *o){
 /* XXX limit/volume per caller (CRASH, SV, VB, R7, BMCPTL, SW/C9, $1B61). */
 static const uint8_t explosion_limit[7] ={80u,15u,50u,50u,70u,2u,0x2au};
 static const uint8_t explosion_volume[7]={0x4fu,0x48u,0x4cu,0x4cu,0x4eu,0x47u,0x4cu};
+/* The sample per XXX caller: crash, capital and bomb are large, aircraft
+   and objects medium, damage small; the shell burst has its own. */
+static const uint8_t explosion_sample[7]={BM_SAMPLE_EXPLOSION_LARGE,
+  BM_SAMPLE_EXPLOSION_SMALL,BM_SAMPLE_EXPLOSION_MEDIUM,BM_SAMPLE_EXPLOSION_MEDIUM,
+  BM_SAMPLE_EXPLOSION_LARGE,BM_SAMPLE_FLAK,BM_SAMPLE_EXPLOSION_LARGE};
 void bm_sound_event_explosion(BmSound *s,const BmSoundOut *o,BmExplosion kind){
+  if(play(o,(BmSampleId)explosion_sample[kind],
+          kind==BM_EXPLOSION_FLAK?BM_VOICE_FLAK:BM_VOICE_EXPLOSION,0u))return;
   bm_sound_xxx(s,main_pokey(o),explosion_limit[kind],explosion_volume[kind]);
 }
+/* The burst only sounds when no POKEY explosion runs; a sample always. */
 void bm_sound_event_flak(BmSound *s,const BmSoundOut *o){
-  if(!s->xp_count)bm_sound_event_explosion(s,o,BM_EXPLOSION_FLAK);
+  if(!s->xp_count||sample(o,BM_SAMPLE_FLAK))bm_sound_event_explosion(s,o,BM_EXPLOSION_FLAK);
 }
 void bm_sound_event_crash(BmSound *s,const BmSoundOut *o){
   unsigned g;
   bm_sound_event_explosion(s,o,BM_EXPLOSION_CRASH);
   bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,0u);
   for(g=BM_SOUND_MAIN;g<=BM_SOUND_BEEP;++g)bm_pokey_write(group(o,g),BM_POKEY_AUDC4,0u);
-  if(o->mixer){bm_mixer_stop(o->mixer,BM_VOICE_GUN);s->gun_sample=0u;}
+  if(o->mixer){bm_mixer_stop(o->mixer,BM_VOICE_GUN);s->gun_sample=0u;}  /* RO/QD */
 }
 
 void bm_sound_event_engine(BmSound *s,const BmSoundOut *o,uint8_t stick){
@@ -260,34 +303,17 @@ void bm_sound_event_shot_end(BmSound *s){s->gun=255u;}
 void bm_sound_event_ground_gun(BmSound *s){s->ground_gun=12u;}
 void bm_sound_event_runway(BmSound *s){s->runway=0x19u;}
 
-/* SOUND=samples: the sample (or 0) for a sound, and its level (256 = full
-   scale) next to the original POKEY sound.  Tune on the V4. */
-#ifndef BM_SOUND_SAMPLES
-#define BM_SOUND_SAMPLES 0
-#endif
-#if BM_SOUND_SAMPLES
-/* Only here: the m68k compiler keeps unused constant tables. */
-#include "bm_sound_assets.h"
-typedef char bm_sample_ids_check[(int)BM_SAMPLE_FILES==(int)BM_SAMPLE_COUNT?1:-1];
-#endif
-static const BmSample *sample(const BmSoundOut *o,BmSampleId id){
-#if BM_SOUND_SAMPLES
-  return o->mixer?bm_samples[id]:0;
-#else
-  (void)o;(void)id;return 0;  /* the samples stay out of the binary */
-#endif
-}
-enum { GAIN_GUN_OWN=96 };
-/* The own gun ($648=3) loops its sample while it fires.  The POKEY's
-   channel 4 stays silent meanwhile; RO's tail (255/254) is not needed. */
+/* The guns ($648): the own (3) or the enemy (0x30) gun loops its sample
+   while it fires; POKEY channel 4 stays silent meanwhile and RO's tail
+   (255/254) is not needed.  A gun without a sample stays POKEY. */
 static void gun_samples(BmSound *s,const BmSoundOut *o){
-  const BmSample *gun=sample(o,BM_SAMPLE_GUN_OWN);
-  if(!gun)return;
-  if(s->gun==3u){
-    if(!s->gun_sample||!bm_mixer_active(o->mixer,BM_VOICE_GUN)){
+  uint8_t want=s->gun==3u&&sample(o,BM_SAMPLE_GUN_OWN)?1u:
+               (s->gun==0x30u&&sample(o,BM_SAMPLE_GUN_ENEMY)?2u:0u);
+  if(want){
+    if(want!=s->gun_sample||!bm_mixer_active(o->mixer,BM_VOICE_GUN)){
       bm_pokey_write(group(o,BM_SOUND_GUN),BM_POKEY_AUDC4,0u);
-      bm_mixer_play(o->mixer,BM_VOICE_GUN,gun,1u,GAIN_GUN_OWN);
-      s->gun_sample=1u;
+      play(o,want==1u?BM_SAMPLE_GUN_OWN:BM_SAMPLE_GUN_ENEMY,BM_VOICE_GUN,1u);
+      s->gun_sample=want;
     }
   }else if(s->gun_sample){
     bm_mixer_release(o->mixer,BM_VOICE_GUN);
@@ -295,28 +321,62 @@ static void gun_samples(BmSound *s,const BmSoundOut *o){
     if(s->gun>=254u)s->gun=0u;
   }
 }
+/* AFF: the whistle ends in the bomb explosion. */
+static void drop_end_event(BmSound *s,const BmSoundOut *o){
+  s->dropping=0u;
+  if(s->bomb_sample){bm_mixer_stop(o->mixer,BM_VOICE_BOMB);s->bomb_sample=0u;}
+  else bm_pokey_write(group(o,BM_SOUND_BOMB),BM_POKEY_AUDC2,0u);
+  bm_sound_event_explosion(s,o,BM_EXPLOSION_BOMB);
+}
+/* CDRP with the whistle sample: the counting stays, the POKEY is silent. */
+static void cdrp_event(BmSound *s,const BmSoundOut *o){
+  if(!s->bomb_sample&&!sample(o,BM_SAMPLE_EXPLOSION_LARGE)){
+    bm_sound_cdrp(s,group(o,BM_SOUND_BOMB),main_pokey(o));return;
+  }
+  if(!s->dropping)return;
+  if(s->drop>=70u){drop_end_event(s,o);return;}
+  if(!(--s->drop_timer&1u))return;
+  ++s->drop;s->drop_last=s->drop;
+  if(s->bomb_sample)return;
+  bm_pokey_write(group(o,BM_SOUND_BOMB),BM_POKEY_AUDF2,s->drop);
+  bm_pokey_write(group(o,BM_SOUND_BOMB),BM_POKEY_AUDC2,0xa2u);
+}
 void bm_sound_event_update(BmSound *s,const BmSoundOut *o){
   gun_samples(s,o);
   if(!s->gun_sample)bm_sound_gunsnd(s,group(o,BM_SOUND_GUN));
   bm_sound_splash(s,group(o,BM_SOUND_BOMB));
+  /* A fresh ground gun shot ($6AF=12) plays its sample instead. */
+  if(s->ground_gun==12u&&play(o,BM_SAMPLE_GROUND_GUN,BM_VOICE_GROUND_GUN,0u))s->ground_gun=0u;
   bm_sound_ggnsnd(s,group(o,BM_SOUND_GROUND_GUN));
   bm_sound_runsnd(s,group(o,BM_SOUND_BEEP));
-  bm_sound_cdrp(s,group(o,BM_SOUND_BOMB),main_pokey(o));
+  cdrp_event(s,o);
 }
 void bm_sound_event_splash_step(BmSound *s,const BmSoundOut *o){
   bm_sound_splash(s,group(o,BM_SOUND_BOMB));
 }
 void bm_sound_event_bomb_release(BmSound *s,const BmSoundOut *o){
-  bm_sound_bomb_release(s,group(o,BM_SOUND_BOMB),main_pokey(o));
+  BmPokey *k=group(o,BM_SOUND_BOMB);
+  if(!sample(o,BM_SAMPLE_BOMB_WHISTLE)&&!sample(o,BM_SAMPLE_EXPLOSION_LARGE)){
+    bm_sound_bomb_release(s,k,main_pokey(o));return;
+  }
+  if(s->dropping)drop_end_event(s,o);
+  s->drop=0x14u;s->splash=0u;
+  if(play(o,BM_SAMPLE_BOMB_WHISTLE,BM_VOICE_BOMB,0u)){
+    bm_pokey_write(k,BM_POKEY_AUDC2,0u);s->bomb_sample=1u;
+  }else{
+    bm_pokey_write(k,BM_POKEY_AUDF2,0x14u);bm_pokey_write(k,BM_POKEY_AUDC2,0xa2u);
+  }
 }
 void bm_sound_event_bomb_lands(BmSound *s,const BmSoundOut *o,BmBombImpact impact){
   BmPokey *k=group(o,BM_SOUND_BOMB);
   if(impact==BM_BOMB_BEHIND_ROOFS){              /* Z3 .13: CDRP runs on */
     s->drop=s->drop_last;++s->dropping;return;
   }
+  if(s->bomb_sample){bm_mixer_stop(o->mixer,BM_VOICE_BOMB);s->bomb_sample=0u;}
   bm_pokey_write(k,BM_POKEY_AUDC2,0u);            /* AFP */
-  if(impact==BM_BOMB_WATER)bm_sound_splash_start(s,k);
-  else bm_sound_event_explosion(s,o,BM_EXPLOSION_BOMB);
+  if(impact==BM_BOMB_WATER){
+    if(!play(o,BM_SAMPLE_SPLASH,BM_VOICE_SPLASH,0u))bm_sound_splash_start(s,k);
+  }else bm_sound_event_explosion(s,o,BM_EXPLOSION_BOMB);
 }
 
 void bm_sound_event_low_altitude(BmSound *s,const BmSoundOut *o,BmLowAltitude state){

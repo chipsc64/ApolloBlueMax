@@ -27,7 +27,9 @@ typedef struct {
   uint8_t music_on;      /* CDTMR1 ($218) running */
   uint8_t music_status[3],music_duration[3],music_volume[3],music_tie[3];
   uint16_t music_position[3];
-  uint8_t gun_sample;    /* SOUND=samples: the own gun plays its sample */
+  /* SOUND=samples: the gun voice plays the own (1) or the enemy (2) gun;
+     the bomb voice plays the whistle. */
+  uint8_t gun_sample,bomb_sample;
 } BmSound;
 void bm_sound_reset(BmSound *s);
 /* EXXON.6 XSND: once per VBI. */
@@ -83,7 +85,7 @@ typedef enum { BM_SAMPLE_ENGINE, BM_SAMPLE_ENGINE_DYING, BM_SAMPLE_ATTACKER_ENGI
   BM_SAMPLE_EXPLOSION_LARGE, BM_SAMPLE_SPLASH, BM_SAMPLE_RUNWAY,
   BM_SAMPLE_COUNT } BmSampleId;
 enum { BM_VOICE_ENGINE, BM_VOICE_ATTACKER, BM_VOICE_GUN, BM_VOICE_GROUND_GUN,
-  BM_VOICE_BOMB, BM_VOICE_EXPLOSION, BM_VOICE_SPLASH, BM_VOICE_RUNWAY };
+  BM_VOICE_FLAK, BM_VOICE_BOMB, BM_VOICE_EXPLOSION, BM_VOICE_SPLASH, BM_VOICE_RUNWAY };
 
 /* XXX callers, with their limit/volume. */
 typedef enum { BM_EXPLOSION_CRASH, BM_EXPLOSION_DAMAGE, BM_EXPLOSION_AIRCRAFT,

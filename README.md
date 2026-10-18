@@ -185,9 +185,17 @@ stereo, at any rate (44100 Hz recommended), at most 10 seconds;
 | NAME | Sound |
 |---|---|
 | `gun_own` | the player's machine gun: one shot, looped while firing |
+| `gun_enemy` | an enemy fighter's gun: one shot, looped while it fires |
+| `ground_gun` | an anti-aircraft gun firing |
+| `flak` | its shell bursting |
+| `explosion_small` | damage to the player's aircraft |
+| `explosion_medium` | an enemy aircraft, ship, vehicle or building destroyed |
+| `explosion_large` | a bomb, the capital target, the player's crash |
+| `bomb_whistle` | a falling bomb; stopped where it lands (behind roofs it runs on into the explosion) |
+| `splash` | a bomb in the water |
 
-`sounds/gun_own.wav` is a generated example (`tools/make_example_sounds.py`);
-replace it with a real recording. More sounds follow.
+The files in `sounds/` are generated examples (`tools/make_example_sounds.py`);
+replace them with real recordings. The engine sounds follow.
 
 ### 50 Hz
 

@@ -4,6 +4,7 @@
 #include "bm_sound_assets.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum { RATE=44336, SECOND=RATE };
 static int16_t buffer[SECOND];
@@ -152,10 +153,67 @@ int main(void){
     bm_sound_event_shot_end(&snd);bm_sound_event_update(&snd,&o);
     check(!m.voice[BM_VOICE_GUN].loop&&snd.gun==0u&&k.audc[3]==0u,"own gun: released at RO");
     bm_sound_event_enemy_shot(&snd);for(n=0;n<4u;++n)bm_sound_event_update(&snd,&o);
-    check(k.audc[3]!=0u,"enemy gun stays POKEY");
+    if(bm_samples[BM_SAMPLE_GUN_ENEMY])
+      /* sound.c has its own copy of the (static) sample: compare data. */
+      check(snd.gun_sample==2u&&m.voice[BM_VOICE_GUN].sample->length==
+            bm_samples[BM_SAMPLE_GUN_ENEMY]->length&&
+            !memcmp(m.voice[BM_VOICE_GUN].sample->data,bm_samples[BM_SAMPLE_GUN_ENEMY]->data,64u)&&
+            k.audc[3]==0u,"enemy gun: its own sample on the gun voice");
+    else check(k.audc[3]!=0u,"enemy gun without a sample stays POKEY");
     o.mixer=0;bm_pokey_reset(&k);bm_sound_reset(&snd);
     bm_sound_event_own_shot(&snd);for(n=0;n<4u;++n)bm_sound_event_update(&snd,&o);
     check(k.audc[3]!=0u,"without the mixer the own gun is POKEY");
+  }
+  /* T37b: explosions, ground gun, flak, bomb whistle and splash. */
+  { BmSound snd;BmMixer m;BmSoundOut o;unsigned g,n;
+    for(g=0;g<BM_SOUND_GROUPS;++g)o.pokey[g]=&k;
+    o.separate=0u;o.mixer=&m;
+    bm_pokey_reset(&k);bm_sound_reset(&snd);bm_mixer_reset(&m);
+    if(bm_samples[BM_SAMPLE_EXPLOSION_MEDIUM]){
+      bm_sound_event_explosion(&snd,&o,BM_EXPLOSION_AIRCRAFT);
+      check(bm_mixer_active(&m,BM_VOICE_EXPLOSION)&&!snd.xp_count&&k.audc[2]==0u,
+            "explosion: sample instead of XXX");
+    }
+    if(bm_samples[BM_SAMPLE_FLAK]){
+      snd.xp_count=5u;bm_sound_event_flak(&snd,&o);
+      check(bm_mixer_active(&m,BM_VOICE_FLAK),"flak: its sample, even during an explosion");
+      snd.xp_count=0u;
+    }
+    if(bm_samples[BM_SAMPLE_GROUND_GUN]){
+      bm_sound_event_ground_gun(&snd);bm_sound_event_update(&snd,&o);
+      check(bm_mixer_active(&m,BM_VOICE_GROUND_GUN)&&!snd.ground_gun&&k.audc[3]==0u,
+            "ground gun: sample instead of GGNSND");
+    }
+    if(bm_samples[BM_SAMPLE_BOMB_WHISTLE]&&bm_samples[BM_SAMPLE_EXPLOSION_LARGE]){
+      bm_mixer_reset(&m);
+      bm_sound_event_bomb_release(&snd,&o);
+      check(bm_mixer_active(&m,BM_VOICE_BOMB)&&snd.bomb_sample&&k.audc[1]==0u,
+            "bomb: the whistle sample, POKEY channel 2 silent");
+      bm_sound_event_bomb_lands(&snd,&o,BM_BOMB_LAND);
+      check(!bm_mixer_active(&m,BM_VOICE_BOMB)&&bm_mixer_active(&m,BM_VOICE_EXPLOSION),
+            "bomb on land: whistle stops, explosion sample");
+      /* Behind the roofs the whistle runs on (CDRP) into the explosion. */
+      bm_mixer_reset(&m);bm_sound_reset(&snd);
+      bm_sound_event_bomb_release(&snd,&o);snd.drop_last=0x30u;
+      bm_sound_event_bomb_lands(&snd,&o,BM_BOMB_BEHIND_ROOFS);
+      check(bm_mixer_active(&m,BM_VOICE_BOMB),"bomb behind roofs: the whistle runs on");
+      for(n=0;n<200u&&snd.dropping;++n)bm_sound_event_update(&snd,&o);
+      check(!snd.dropping&&!bm_mixer_active(&m,BM_VOICE_BOMB)&&
+            bm_mixer_active(&m,BM_VOICE_EXPLOSION)&&k.audc[1]==0u,
+            "CDRP with samples ends in the explosion sample");
+    }
+    if(bm_samples[BM_SAMPLE_SPLASH]){
+      bm_mixer_reset(&m);bm_sound_reset(&snd);
+      bm_sound_event_bomb_release(&snd,&o);bm_sound_event_bomb_lands(&snd,&o,BM_BOMB_WATER);
+      check(bm_mixer_active(&m,BM_VOICE_SPLASH)&&!snd.splash&&k.audc[1]==0u,
+            "bomb in water: splash sample instead of SPLASH");
+    }
+    /* Without the mixer every event is the POKEY routine. */
+    o.mixer=0;bm_pokey_reset(&k);bm_sound_reset(&snd);
+    bm_sound_event_explosion(&snd,&o,BM_EXPLOSION_AIRCRAFT);
+    check(snd.xp_count==1u&&k.audc[2]==0x4cu,"without the mixer: XXX");
+    bm_sound_event_bomb_release(&snd,&o);
+    check(k.audf[1]==0x14u&&k.audc[1]==0xa2u,"without the mixer: the POKEY whistle");
   }
   if(failures){printf("%d pokey test(s) failed\n",failures);return 1;}
   printf("pokey tests passed\n");return 0;
