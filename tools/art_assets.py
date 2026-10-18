@@ -94,6 +94,12 @@ SPRITE_KINDS = [('player', 6), ('shadow', 3), ('crash', 2), ('shot', 1),
                 ('enemy', 32), ('enemy_shadow', 2), ('enemy_shot', 1),
                 ('gunsight', 1), ('gun_shot', 2), ('capital', 1)]
 MAX_SPRITE = 64
+# Variants whose Atari colour carries game information: bonus targets ($7C/$A8
+# blinking, red $32) and the blinking sight.  Their images need grey pixels,
+# or that information is lost.  Explosions, wrecks and the enemy's crash
+# colour only flicker, so a fully painted image is fine there.
+TINTED_VARIANTS = {'enemy': range(0, 6), 'ship': (0,), 'vehicle': range(0, 4),
+                   'gunsight': (0,)}
 
 
 def sprite_data(name, pixels):
@@ -134,6 +140,11 @@ def load_sprites(art_dir):
         w, h, pixels = read_png(os.path.join(folder, name))
         if w > MAX_SPRITE or h > MAX_SPRITE:
             raise SystemExit(f'{name}: at most {MAX_SPRITE}x{MAX_SPRITE} pixels')
+        tinted = TINTED_VARIANTS.get(kind, ())
+        if (variant in tinted or (variant is None and tinted)) and not any(a >= 128 and r == g == b for r, g, b, a in pixels):
+            print(f'warning: {name} has no pure grey (R=G=B) pixels, so it never takes '
+                  f'the object\'s Atari colour: bonus targets and colour blinking will '
+                  f'not show', file=sys.stderr)
         images[(kind, variant)] = (w, h, pixels)
     return images
 
