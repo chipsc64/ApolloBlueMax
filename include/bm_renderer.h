@@ -41,12 +41,24 @@ typedef enum {
   BM_SPRITE_KINDS
 } BmSpriteKind;
 /* wide: every image column twice (the capital wreck's SIZEP2 3 phase);
-   bottom: the first screen line the object no longer reaches. */
-typedef struct { uint8_t kind,variant,colour,behind,wide; int16_t x,y,bottom; } BmSpriteDraw;
+   bottom: the first screen line the object no longer reaches.
+   left..below: while bm_sprite_hd_mask is set, the pixels the classic
+   renderer itself drew for this object (left > right: none). */
+typedef struct {
+  uint8_t kind,variant,colour,behind,wide; int16_t x,y,bottom;
+  int16_t left,top,right,below;
+} BmSpriteDraw;
 enum { BM_SPRITE_DRAW_MAX=32 };
 typedef struct { BmSpriteDraw draw[BM_SPRITE_DRAW_MAX]; unsigned count; } BmSpriteList;
 extern BmSpriteList bm_sprite_list;
 extern uint32_t bm_sprite_hd_mask;
+/* While bm_sprite_hd_mask is set: per classic pixel, 1 + the list entry
+   that drew it last (0: no object), so an upgraded renderer can put a
+   classic object back over an upgraded one drawn before it. */
+extern uint8_t bm_sprite_owner[BM_SCREEN_WIDTH*BM_SCREEN_HEIGHT];
+/* The kinds the hd renderer draws from art/sprites (render_hd.c); every
+   complete kind by default. */
+extern uint32_t bm_hd_sprite_kinds;
 
 /* Converting one classic line (320 palette indices) into two 640-pixel
    RGB565 lines, as pixel pairs: one uint32_t per Atari pixel and line.

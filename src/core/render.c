@@ -20,20 +20,69 @@ uint32_t bm_profile_total[BM_PROFILE_SLOTS],bm_profile_count[BM_PROFILE_SLOTS];
 #endif
 BmSpriteList bm_sprite_list;
 uint32_t bm_sprite_hd_mask;
+uint8_t bm_sprite_owner[BM_SCREEN_WIDTH*BM_SCREEN_HEIGHT];
+/* Ownership: the area around a classic object is saved before it is drawn
+   and compared at the next object (or the end of the objects).  The area
+   covers every object's reach from its recorded x/y. */
+enum { OWN_LEFT=16, OWN_UP=16, OWN_W=96, OWN_H=64 };
+static BmFramebuffer *own_frame;
+static BmSpriteDraw *own_draw;
+static uint8_t own_before[OWN_W*OWN_H];
+static int own_x,own_y;
+/* The columns of the saved area inside the picture. */
+static int own_c0(void){return own_x<0?-own_x:0;}
+static int own_c1(void){return own_x+OWN_W>BM_SCREEN_WIDTH?BM_SCREEN_WIDTH-own_x:OWN_W;}
+static void own_finish(void){
+  BmSpriteDraw *d=own_draw;
+  int x,y,c0=own_c0(),c1=own_c1();
+  uint8_t id;
+  if(!d)return;
+  own_draw=0;
+  id=(uint8_t)(d-bm_sprite_list.draw+1);
+  for(y=0;y<OWN_H;++y){
+    int sy=own_y+y;
+    const uint8_t *now,*before;
+    if((unsigned)sy>=BM_SCREEN_HEIGHT)continue;
+    now=own_frame->pixels+sy*BM_SCREEN_WIDTH+own_x;
+    before=own_before+y*OWN_W;
+    for(x=c0;x<c1;++x){
+      if(now[x]==before[x])continue;
+      bm_sprite_owner[sy*BM_SCREEN_WIDTH+own_x+x]=id;
+      if(own_x+x<d->left)d->left=(int16_t)(own_x+x);
+      if(own_x+x>d->right)d->right=(int16_t)(own_x+x);
+      if(sy<d->top)d->top=(int16_t)sy;
+      d->below=(int16_t)sy;
+    }
+  }
+}
 /* Records an object; 1 if the classic renderer draws it itself.  The entry
    (or 0 when the list is full) stays in last_draw for extra fields. */
 static BmSpriteDraw *last_draw;
 static int sprite(unsigned kind,unsigned variant,int x,int y,unsigned colour,
                   unsigned behind){
+  int classic=!(bm_sprite_hd_mask&(1u<<kind));
+  own_finish();
   last_draw=0;
   if(bm_sprite_list.count<BM_SPRITE_DRAW_MAX){
     BmSpriteDraw *d=&bm_sprite_list.draw[bm_sprite_list.count++];
     d->kind=(uint8_t)kind;d->variant=(uint8_t)variant;d->colour=(uint8_t)colour;
     d->behind=(uint8_t)behind;d->x=(int16_t)x;d->y=(int16_t)y;
     d->wide=0u;d->bottom=BM_SCREEN_HEIGHT;
+    d->left=d->top=INT16_MAX;d->right=d->below=INT16_MIN;
     last_draw=d;
+    if(classic&&bm_sprite_hd_mask&&own_frame){
+      int r,c0,c1;
+      own_draw=d;own_x=x-OWN_LEFT;own_y=y-OWN_UP;
+      c0=own_c0();c1=own_c1();
+      for(r=0;r<OWN_H;++r){
+        int sy=own_y+r;
+        if((unsigned)sy<BM_SCREEN_HEIGHT&&c1>c0)
+          memcpy(own_before+r*OWN_W+c0,own_frame->pixels+sy*BM_SCREEN_WIDTH+own_x+c0,
+                 (size_t)(c1-c0));
+      }
+    }
   }
-  return !(bm_sprite_hd_mask&(1u<<kind));
+  return classic;
 }
 static void px(BmFramebuffer *f,int x,int y,uint8_t c){
   if((unsigned)x<BM_SCREEN_WIDTH&&(unsigned)y<BM_SCREEN_HEIGHT)f->pixels[y*BM_SCREEN_WIDTH+x]=c;
@@ -536,6 +585,10 @@ static void options_screen(BmFramebuffer *f,const BmGame *g){
 static void classic_render(const BmGame*g,BmFramebuffer*f){
   int x,y,p=g->player.x,q=g->player.y;palette(f,g);
   bm_sprite_list.count=0u;
+  /* Ownership only matters when some kinds stay classic. */
+  own_draw=0;
+  own_frame=bm_sprite_hd_mask&&bm_sprite_hd_mask!=(1u<<BM_SPRITE_KINDS)-1u?f:0;
+  if(own_frame)memset(bm_sprite_owner,0,sizeof(bm_sprite_owner));
   if(g->mode==BM_STATE_OPTIONS){options_screen(f,g);return;}
 #if BM_CLASSIC_TEST_PAGE
   static const BmAntic4Zone classic_zones[]={
@@ -915,6 +968,7 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
   );
 #if BM_CLASSIC_TEST_PAGE
 #endif
+  own_finish();own_frame=0;
 #if BM_CLASSIC_TEST_PAGE
 #if BM_DEBUG_HUD
   (void)status_line;

@@ -93,16 +93,39 @@ static uint16_t tint(uint32_t rgb,uint16_t grey){
   uint32_t r=((rgb>>16)&255u)*grey/255u,g=((rgb>>8)&255u)*grey/255u,b=(rgb&255u)*grey/255u;
   return (uint16_t)((r>>3)<<11|(g>>2)<<5|(b>>3));
 }
-static void draw_sprites(BmFrame *frame){
-  unsigned k;
+uint32_t bm_hd_sprite_kinds=BM_ART_SPRITE_COMPLETE;
+/* This frame's kinds: the requested ones that have every image. */
+static uint32_t hd_kinds;
+/* A classic object drawn after an upgraded one goes back over it: its own
+   pixels (bm_sprite_owner) from the classic picture, 2x2. */
+static void restore_classic(BmFrame *frame,const uint32_t *pair,unsigned k){
+  const BmSpriteDraw *d=&bm_sprite_list.draw[k];
+  uint8_t id=(uint8_t)(k+1u);
+  int x,y;
+  for(y=d->top;y<=d->below;++y){
+    uint32_t *top=(uint32_t *)((uint8_t *)frame->pixels+(unsigned)(2*y)*frame->stride);
+    uint32_t *bottom=(uint32_t *)((uint8_t *)top+frame->stride);
+    for(x=d->left;x<=d->right;++x){
+      unsigned i=(unsigned)y*BM_SCREEN_WIDTH+(unsigned)x;
+      if(bm_sprite_owner[i]!=id)continue;
+      top[x]=bottom[x]=pair[classic.pixels[i]];
+    }
+  }
+}
+static void draw_sprites(BmFrame *frame,const uint32_t *pair){
+  unsigned k,upgraded=0u;
   for(k=0;k<bm_sprite_list.count;++k){
     const BmSpriteDraw *d=&bm_sprite_list.draw[k];
-    const BmArtSprite *a;
+    const BmArtSprite *a=0;
     uint32_t colour;
     int r,c;
-    if(!((uint32_t)BM_ART_SPRITE_COMPLETE&(1u<<d->kind)))continue;
-    a=bm_art_sprites[d->kind][d->variant%BM_ART_SPRITE_VARIANTS];
-    if(!a)continue;
+    if(hd_kinds&(1u<<d->kind))
+      a=bm_art_sprites[d->kind][d->variant%BM_ART_SPRITE_VARIANTS];
+    if(!a){
+      if(upgraded&&d->left<=d->right)restore_classic(frame,pair,k);
+      continue;
+    }
+    upgraded=1u;
     colour=d->colour?bm_atari_pal_rgb[d->colour]:0u;
     for(r=0;r<a->height;++r){
       int y=2*d->y+r;
@@ -140,7 +163,8 @@ static void hd_render(const BmGame *g,BmFrame *frame){
   BmRowJob job;
   uint32_t profile;
   if(!packed_ready)pack_textures();
-  bm_sprite_hd_mask=BM_ART_SPRITE_COMPLETE;
+  hd_kinds=bm_hd_sprite_kinds&(uint32_t)BM_ART_SPRITE_COMPLETE;
+  bm_sprite_hd_mask=hd_kinds;
   bm_renderer_classic.render(g,&source);
   bm_sprite_hd_mask=0u;
   profile=bm_profile_start();
@@ -169,7 +193,7 @@ static void hd_render(const BmGame *g,BmFrame *frame){
     }
     bm_row_hd(&job);
   }
-  draw_sprites(frame);
+  draw_sprites(frame,pair);
   bm_profile_stop(BM_PROFILE_CONVERT,profile);
 }
 const BmRenderer bm_renderer_hd={"hd",{640u,400u,BM_PIXEL_RGB565},hd_render};

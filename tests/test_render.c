@@ -163,6 +163,45 @@ int main(void){
     check(checked>0u&&!outside,"sprite list: one player entry; masking only changes its box");
     check(inside>0u,"masking the player removes it from the classic picture");
   }
+  /* T36e: with only the player upgraded, a classic object drawn after it
+     (shots, the bomb, shells) lies over it again: its own pixels show the
+     classic colour, as in the original order. */
+  if((uint32_t)BM_ART_SPRITE_COMPLETE&(1u<<BM_SPRITE_PLAYER)){
+    static BmFramebuffer plain;
+    BmFrame a={{BM_SCREEN_WIDTH,BM_SCREEN_HEIGHT,BM_PIXEL_CLUT8},&plain,0,0u};
+    BmFrame wide={{640u,400u,BM_PIXEL_RGB565},0,hd,640u*2u};
+    unsigned over=0,wrong=0,k,j;
+    bm_hd_sprite_kinds=1u<<BM_SPRITE_PLAYER;
+    bm_game_boot(&game,7u);
+    for(f=0;f<6000u;++f){
+      in.fire=(f%8u)<2u;in.bomb=(f%200u)==100u;bm_game_tick(&game,&in);
+      if(game.mode!=BM_STATE_PLAYING)continue;
+      bm_renderer_hd.render(&game,&wide);
+      /* The same classic picture and ownership as inside the hd renderer. */
+      bm_sprite_hd_mask=1u<<BM_SPRITE_PLAYER;bm_renderer_classic.render(&game,&a);
+      bm_sprite_hd_mask=0u;
+      for(j=0;j<bm_sprite_list.count;++j){
+        const BmSpriteDraw *p=&bm_sprite_list.draw[j];
+        const BmArtSprite *art=bm_art_sprites[BM_SPRITE_PLAYER][p->variant];
+        if(p->kind!=BM_SPRITE_PLAYER||!art)continue;
+        for(k=j+1u;k<bm_sprite_list.count;++k){
+          const BmSpriteDraw *d=&bm_sprite_list.draw[k];
+          int xx,yy;
+          if(d->left>d->right)continue;
+          for(yy=d->top;yy<=d->below;++yy)for(xx=d->left;xx<=d->right;++xx){
+            unsigned i=(unsigned)yy*BM_SCREEN_WIDTH+(unsigned)xx;
+            if(bm_sprite_owner[i]!=k+1u)continue;
+            if(2*xx<2*p->x||2*xx>=2*p->x+art->width||2*yy<2*p->y||2*yy>=2*p->y+art->height)continue;
+            ++over;
+            if(hd[(2u*yy)*640u+2u*xx]!=rgb565(plain.palette[plain.pixels[i]]))++wrong;
+          }
+        }
+      }
+    }
+    bm_hd_sprite_kinds=BM_ART_SPRITE_COMPLETE;
+    printf("classic over hd: %u pixels\n",over);
+    check(over>0u&&!wrong,"hd: a classic object drawn later lies over an hd object");
+  }
   if(failures){printf("%d render test(s) failed\n",failures);return 1;}
   printf("render tests passed\n");return 0;
 }
