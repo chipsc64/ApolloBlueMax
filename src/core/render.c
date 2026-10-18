@@ -20,13 +20,18 @@ uint32_t bm_profile_total[BM_PROFILE_SLOTS],bm_profile_count[BM_PROFILE_SLOTS];
 #endif
 BmSpriteList bm_sprite_list;
 uint32_t bm_sprite_hd_mask;
-/* Records an object; 1 if the classic renderer draws it itself. */
+/* Records an object; 1 if the classic renderer draws it itself.  The entry
+   (or 0 when the list is full) stays in last_draw for extra fields. */
+static BmSpriteDraw *last_draw;
 static int sprite(unsigned kind,unsigned variant,int x,int y,unsigned colour,
                   unsigned behind){
+  last_draw=0;
   if(bm_sprite_list.count<BM_SPRITE_DRAW_MAX){
     BmSpriteDraw *d=&bm_sprite_list.draw[bm_sprite_list.count++];
     d->kind=(uint8_t)kind;d->variant=(uint8_t)variant;d->colour=(uint8_t)colour;
     d->behind=(uint8_t)behind;d->x=(int16_t)x;d->y=(int16_t)y;
+    d->wide=0u;d->bottom=BM_SCREEN_HEIGHT;
+    last_draw=d;
   }
   return !(bm_sprite_hd_mask&(1u<<kind));
 }
@@ -739,8 +744,18 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
     /* CPTL: AAH/XCPTLIM on P2 (COLPM2, CLUT 29), AAI on P3 (707=0). */
     const BmWorldBuffer *w=&g->classic_world;
     int x0=bm_pm_x(w->capital_x),y0=bm_pm_y((int)w->capital_y+w->capital_shift-20);
-    int xx,yy;
-    if(sprite(BM_SPRITE_CAPITAL_TARGET,0u,x0,y0,p2_colour(g),w->gprior==4u))
+    int xx,yy,drawn;
+    /* The image's top: P3 two lines above P2 (intact), or the wreck's
+       first row.  Below $6BF=196 rows past scanline 198 are gone. */
+    drawn=sprite(BM_SPRITE_CAPITAL_TARGET,w->capital_wreck?1u:0u,x0,
+                 y0+(w->capital_wreck?3:6),p2_colour(g),w->gprior==4u);
+    if(last_draw){
+      int bottom=BM_ATARI_PLAYFIELD_HEIGHT;
+      if(w->capital_shift&&bm_pm_y(199)<bottom)bottom=bm_pm_y(199);
+      last_draw->bottom=(int16_t)bottom;
+      last_draw->wide=(uint8_t)(w->capital_wreck&&w->capital_size==3u);
+    }
+    if(drawn)
     for(yy=y0;yy<=y0+22&&yy<BM_ATARI_PLAYFIELD_HEIGHT;++yy)
       for(xx=x0;xx<x0+64;++xx){
         uint8_t cover,under;

@@ -92,14 +92,14 @@ def rgb565(r, g, b):
 SPRITE_KINDS = [('player', 6), ('shadow', 3), ('crash', 2), ('shot', 1),
                 ('bomb', 2), ('explosion', 2), ('ship', 2), ('vehicle', 8),
                 ('enemy', 32), ('enemy_shadow', 2), ('enemy_shot', 1),
-                ('gunsight', 1), ('gun_shot', 2), ('capital', 1)]
+                ('gunsight', 1), ('gun_shot', 2), ('capital', 2)]
 MAX_SPRITE = 64
 # Variants whose Atari colour carries game information: bonus targets ($7C/$A8
-# blinking, red $32) and the blinking sight.  Their images need grey pixels,
+# blinking, red $32), the blinking sight and the capital targets' colours.  Their images need grey pixels,
 # or that information is lost.  Explosions, wrecks and the enemy's crash
 # colour only flicker, so a fully painted image is fine there.
 TINTED_VARIANTS = {'enemy': range(0, 6), 'ship': (0,), 'vehicle': range(0, 4),
-                   'gunsight': (0,)}
+                   'gunsight': (0,), 'capital': (0,)}
 
 
 def sprite_data(name, pixels):

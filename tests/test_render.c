@@ -15,7 +15,7 @@ static int hd_sprite_area(unsigned x,unsigned y){
     const BmSpriteDraw *d=&bm_sprite_list.draw[k];
     int sx=2*d->x,sy=2*d->y;
     if(!((uint32_t)BM_ART_SPRITE_COMPLETE&(1u<<d->kind)))continue;
-    if((int)x>=sx-2&&(int)x<sx+66&&(int)y>=sy-2&&(int)y<sy+66)return 1;
+    if((int)x>=sx-2&&(int)x<sx+(d->wide?130:66)&&(int)y>=sy-2&&(int)y<sy+66)return 1;
   }
   return 0;
 }
@@ -25,7 +25,7 @@ static int covered_later(unsigned k,int x,int y){
     const BmSpriteDraw *d=&bm_sprite_list.draw[k];
     const BmArtSprite *a=bm_art_sprites[d->kind][d->variant%BM_ART_SPRITE_VARIANTS];
     if(!((uint32_t)BM_ART_SPRITE_COMPLETE&(1u<<d->kind))||!a)continue;
-    if(x>=2*d->x&&x<2*d->x+a->width&&y>=2*d->y&&y<2*d->y+a->height)return 1;
+    if(x>=2*d->x&&x<2*d->x+(a->width<<d->wide)&&y>=2*d->y&&y<2*d->y+a->height)return 1;
   }
   return 0;
 }

@@ -37,10 +37,12 @@ typedef enum {
   BM_SPRITE_ENEMY_SHOT,
   BM_SPRITE_GUNSIGHT,
   BM_SPRITE_GUN_SHOT,      /* variant: 1 = shell burst */
-  BM_SPRITE_CAPITAL_TARGET,
+  BM_SPRITE_CAPITAL_TARGET,/* variant: 0 intact (from the P3 top), 1 wreck */
   BM_SPRITE_KINDS
 } BmSpriteKind;
-typedef struct { uint8_t kind,variant,colour,behind; int16_t x,y; } BmSpriteDraw;
+/* wide: every image column twice (the capital wreck's SIZEP2 3 phase);
+   bottom: the first screen line the object no longer reaches. */
+typedef struct { uint8_t kind,variant,colour,behind,wide; int16_t x,y,bottom; } BmSpriteDraw;
 enum { BM_SPRITE_DRAW_MAX=32 };
 typedef struct { BmSpriteDraw draw[BM_SPRITE_DRAW_MAX]; unsigned count; } BmSpriteList;
 extern BmSpriteList bm_sprite_list;

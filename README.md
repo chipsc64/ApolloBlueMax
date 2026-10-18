@@ -137,7 +137,8 @@ art/sprites/KIND.png    every variant of an object
 | `player` | 0/1 level, 2/3 banking left, 4/5 banking right (even/odd: propeller frame) |
 | `shadow` | 0 normal, 1 thin far shadow, 2 banking |
 | `crash` | 0/1 the two halves of the explosion |
-| `shot`, `enemy_shot`, `gunsight`, `capital` | 0 |
+| `shot`, `enemy_shot`, `gunsight` | 0 |
+| `capital` | 0 intact target (64x30), 1 wreck (64x36, drawn twice as wide while it pulses) |
 | `bomb` | 0/1 the falling bomb's two phases |
 | `explosion` | 0 on land, 1 water splash |
 | `ship` | 0 afloat, 1 destroyed (placed one Atari line higher) |
@@ -155,10 +156,9 @@ original shapes.
 
 The textures and sprites in the repository are generated examples
 (`tools/make_example_art.py`, derived from the Atari shapes); replace them
-with real artwork. The capital target has no example and stays as in the
-original. Shots, the bomb and the shells are small: `shot` 8x2,
+with real artwork. Shots, the bomb and the shells are small: `shot` 8x2,
 `enemy_shot` 8x4, `bomb` 8x6, `gun_shot` 8x4 (shell) and 12x8 (burst).
-For `enemy`, `ship`, `vehicle` and `gunsight` the build warns about images
+For `enemy`, `ship`, `vehicle`, `gunsight` and `capital` the build warns about images
 without pure grey pixels: bonus targets would no longer show. PNGs must be
 8-bit RGB, RGBA, grey or palette images. `tools/art_assets.py` converts
 them during the build, so no extra Python packages are needed.

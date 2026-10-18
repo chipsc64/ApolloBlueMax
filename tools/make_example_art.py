@@ -118,7 +118,7 @@ def compose(layers, outline=True):
     top), 'p3' (dark), 'fire', 'water', 'shadow'.  Later layers cover
     earlier ones, like the Atari's P2 over P3."""
     height = max(len(shape) + dy for shape, dy, _ in layers) * 2
-    width = 32
+    width = max(len(shape[0]) for shape, _, _ in layers) * 2
     style = [[None] * width for _ in range(height)]
     for shape, dy, kind in layers:
         for y in range(len(shape) * 2):
@@ -217,6 +217,17 @@ def main(art_dir, header_path='build/assets/chbas/bm_chbas_assets.h'):
     for v in range(2):
         write_sprite(sprites, f'crash_{v}', compose([(a('explosion'), 0, 'fire')]))
     write_sprite(sprites, 'gunsight', compose([(a('gunsight'), 0, 'tint')]))
+    # The capital target (world.c): P3 (dark) two lines above P2 (its
+    # colour), 8 bits at SIZEP2 1, so one bit is 8 HD pixels; the wreck is
+    # P2 alone and is stretched to twice the width while it pulses.
+    world = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src', 'core', 'world.c')).read()
+    def capital(name):
+        values = world.split(f'static const uint8_t {name}[')[1].split('{')[1].split('}')[0]
+        return [[1 if v & (0x80 >> (x // 4)) else 0 for x in range(32)]
+                for v in (int(t, 16) for t in values.replace('\n', ' ').split(',') if t.strip())]
+    write_sprite(sprites, 'capital_0', compose([(capital('capital_p3'), 0, 'p3'),
+                                                (capital('capital_p2'), 2, 'tint')]))
+    write_sprite(sprites, 'capital_1', compose([(capital('capital_wreck_p2'), 0, 'tint')]))
     # Shots, the bomb and the shells are missiles, drawn as small blocks
     # (render.c): one character per HD pixel, at the classic block's top-left.
     for name, rows in SMALL.items():

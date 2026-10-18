@@ -107,11 +107,11 @@ static void draw_sprites(BmFrame *frame){
     for(r=0;r<a->height;++r){
       int y=2*d->y+r;
       uint16_t *line;
-      if((unsigned)y>=frame->format.height)continue;
+      if((unsigned)y>=frame->format.height||y>=2*d->bottom)continue;
       line=(uint16_t *)((uint8_t *)frame->pixels+(unsigned)y*frame->stride);
-      for(c=0;c<a->width;++c){
+      for(c=0;c<a->width<<d->wide;++c){
         int x=2*d->x+c;
-        unsigned i=(unsigned)(r*a->width+c);
+        unsigned i=(unsigned)(r*a->width+(c>>d->wide));
         uint8_t m=a->mask[i];
         if(!m||(unsigned)x>=frame->format.width)continue;
         if(d->behind){
