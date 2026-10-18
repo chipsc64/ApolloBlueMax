@@ -277,7 +277,7 @@ static const BmSample *sample(const BmSoundOut *o,BmSampleId id){
   (void)o;(void)id;return 0;  /* the samples stay out of the binary */
 #endif
 }
-enum { GAIN_GUN_OWN=56 };
+enum { GAIN_GUN_OWN=96 };
 /* The own gun ($648=3) loops its sample while it fires.  The POKEY's
    channel 4 stays silent meanwhile; RO's tail (255/254) is not needed. */
 static void gun_samples(BmSound *s,const BmSoundOut *o){

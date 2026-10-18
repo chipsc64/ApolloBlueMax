@@ -43,6 +43,8 @@ def read_wav(path):
         values = [(v - 128) << 8 for v in pcm]
     if channels == 2:
         values = [(values[i] + values[i + 1]) // 2 for i in range(0, len(values) - 1, 2)]
+    if not 4000 <= rate <= 65535:
+        raise SystemExit(f'{path}: sample rate {rate} Hz, use 4000..65535 (44100 recommended)')
     if len(values) > rate * MAX_SECONDS:
         raise SystemExit(f'{path}: at most {MAX_SECONDS} seconds')
     return rate, list(values)

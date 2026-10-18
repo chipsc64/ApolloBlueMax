@@ -24,14 +24,17 @@ def write_wav(path, values, rate=RATE):
 
 
 def gun_shot(rng):
+    """A sharp crack of high noise over a short body, so that it cuts
+    through the low engine drone (the original gun is high POKEY noise)."""
     length = RATE // 15
-    out, low = [], 0.0
+    out, prev, low = [], 0.0, 0.0
     for i in range(length):
         t = i / RATE
-        crack = rng.uniform(-1, 1) * math.exp(-t * 90)
-        low += (rng.uniform(-1, 1) - low) * 0.08          # filtered noise: the body
-        thump = math.sin(2 * math.pi * 95 * t) * math.exp(-t * 45)
-        v = 0.55 * crack + 1.6 * low * math.exp(-t * 35) + 0.45 * thump
+        noise = rng.uniform(-1, 1)
+        high, prev = noise - prev, noise                 # first difference: bright
+        low += (noise - low) * 0.25
+        v = (0.9 * high * math.exp(-t * 28) + 0.6 * low * math.exp(-t * 40)
+             + 0.25 * math.sin(2 * math.pi * 140 * t) * math.exp(-t * 60))
         out.append(v)
     peak = max(abs(v) for v in out)
     return [int(round(v / peak * 29000)) for v in out]

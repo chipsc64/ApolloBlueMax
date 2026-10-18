@@ -10,11 +10,12 @@ enum { BM_MIXER_VOICES=8 };
 typedef struct {
   const BmSample *sample;
   uint32_t index,frac;   /* position: index + frac/65536 */
-  uint16_t pitch;        /* 256 = the sample's own rate */
+  uint16_t pitch;        /* 256 = the sample's own rate (at most 4095) */
   uint16_t volume;       /* 256 = full scale */
   uint8_t loop,active;
 } BmVoice;
-typedef struct { BmVoice voice[BM_MIXER_VOICES]; } BmMixer;
+/* starts: samples started since the last reset (diagnostics). */
+typedef struct { BmVoice voice[BM_MIXER_VOICES]; uint32_t starts; } BmMixer;
 void bm_mixer_reset(BmMixer *m);
 /* Start a sample from its beginning on a voice (looped or once). */
 void bm_mixer_play(BmMixer *m,unsigned voice,const BmSample *sample,uint8_t loop,

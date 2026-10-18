@@ -101,6 +101,7 @@ typedef struct {
     /* Diagnostics, printed on exit by the SOUND_TEST build. */
     uint32_t frames,missed,late_frames,signals,resyncs,underruns,max_error;
     uint32_t work_ticks,work_max,render_ticks,render_samples;
+    uint32_t sample_peak;            /* SOUND_TEST: loudest sample output */
     uint32_t draw_ticks,draw_max,draw_frames;   /* acquire -> present */
     uint64_t draw_start;
     uint32_t draw_misses,miss_start,cpu_last,eclock_last;  /* SOUND_TEST */
@@ -259,7 +260,20 @@ static void audio_write(SagaState *s){
                 }
             }
         }else memset(s->mono,0,n*sizeof(int16_t));
-        if(s->mixer)bm_mixer_render(s->mixer,s->mono,n,AUDIO_RATE);
+        if(s->mixer){
+#if BM_SOUND_TEST
+            /* The samples alone first, for their peak level. */
+            memset(s->extra,0,n*sizeof(int16_t));
+            bm_mixer_render(s->mixer,s->extra,n,AUDIO_RATE);
+            for(i=0;i<n;++i){
+                int32_t v=(int32_t)s->mono[i]+s->extra[i],a=s->extra[i]<0?-s->extra[i]:s->extra[i];
+                if((uint32_t)a>s->sample_peak)s->sample_peak=(uint32_t)a;
+                s->mono[i]=(int16_t)(v>32767?32767:(v<-32768?-32768:v));
+            }
+#else
+            bm_mixer_render(s->mixer,s->mono,n,AUDIO_RATE);
+#endif
+        }
         for(i=0;i<n;++i){out[2*i]=s->mono[i];out[2*i+1]=s->mono[i];}
         s->audio_written+=n;s->render_samples+=n;
     }
@@ -379,6 +393,9 @@ static void saga_close(BmPlatform *p){
             printf("Blue Max audio: signals=%lu resyncs=%lu max_error=%lu underruns=%lu intena=%u\n",
                 (unsigned long)s->signals,(unsigned long)s->resyncs,(unsigned long)s->max_error,
                 (unsigned long)s->underruns,(unsigned)s->audio_intena);
+            if(s->mixer)
+                printf("Blue Max samples: started=%lu peak=%lu (32767 = full scale)\n",
+                    (unsigned long)s->mixer->starts,(unsigned long)s->sample_peak);
         }
 #endif
     }
