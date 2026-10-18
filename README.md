@@ -155,8 +155,11 @@ original shapes.
 
 The textures and sprites in the repository are generated examples
 (`tools/make_example_art.py`, derived from the Atari shapes); replace them
-with real artwork. Shots, the bomb and the capital target have no example
-and stay as in the original. PNGs must be
+with real artwork. The capital target has no example and stays as in the
+original. Shots, the bomb and the shells are small: `shot` 8x2,
+`enemy_shot` 8x4, `bomb` 8x6, `gun_shot` 8x4 (shell) and 12x8 (burst).
+For `enemy`, `ship`, `vehicle` and `gunsight` the build warns about images
+without pure grey pixels: bonus targets would no longer show. PNGs must be
 8-bit RGB, RGBA, grey or palette images. `tools/art_assets.py` converts
 them during the build, so no extra Python packages are needed.
 

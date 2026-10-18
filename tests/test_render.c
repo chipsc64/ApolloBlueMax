@@ -19,6 +19,16 @@ static int hd_sprite_area(unsigned x,unsigned y){
   }
   return 0;
 }
+/* An HD object drawn after list entry k covers HD pixel (x,y). */
+static int covered_later(unsigned k,int x,int y){
+  for(++k;k<bm_sprite_list.count;++k){
+    const BmSpriteDraw *d=&bm_sprite_list.draw[k];
+    const BmArtSprite *a=bm_art_sprites[d->kind][d->variant%BM_ART_SPRITE_VARIANTS];
+    if(!((uint32_t)BM_ART_SPRITE_COMPLETE&(1u<<d->kind))||!a)continue;
+    if(x>=2*d->x&&x<2*d->x+a->width&&y>=2*d->y&&y<2*d->y+a->height)return 1;
+  }
+  return 0;
+}
 static void check(int ok,const char *what){if(!ok){printf("FAIL: %s\n",what);++failures;}}
 static uint16_t rgb565(uint32_t c){
   return (uint16_t)(((c>>8)&0xf800u)|((c>>5)&0x07e0u)|((c>>3)&0x001fu));
@@ -110,6 +120,7 @@ int main(void){
         for(r=0;r<a->height;++r)for(c=0;c<a->width;++c){
           int xx=2*d->x+c,yy=2*d->y+r;
           if(a->mask[r*a->width+c]!=1u||xx<0||xx>=640||yy<0||yy>=400)continue;
+          if(covered_later(k,xx,yy))continue;
           ++drawn;
           if(hd[yy*640+xx]!=a->pixels[r*a->width+c])++wrong;
         }

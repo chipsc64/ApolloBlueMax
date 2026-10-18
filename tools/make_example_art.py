@@ -217,6 +217,61 @@ def main(art_dir, header_path='build/assets/chbas/bm_chbas_assets.h'):
     for v in range(2):
         write_sprite(sprites, f'crash_{v}', compose([(a('explosion'), 0, 'fire')]))
     write_sprite(sprites, 'gunsight', compose([(a('gunsight'), 0, 'tint')]))
+    # Shots, the bomb and the shells are missiles, drawn as small blocks
+    # (render.c): one character per HD pixel, at the classic block's top-left.
+    for name, rows in SMALL.items():
+        write_sprite(sprites, name, small(rows))
+
+
+# The player's shot (4x1 Atari pixels), the enemy's shot (4x2, takes the
+# enemy's colour), the bomb's two phases (wide row 1; narrow right half on
+# row 0, then on row 2), the shell (4x2) and its burst (four 4-pixel rows,
+# the odd ones two pixels further left).
+SMALL = {
+    'shot': ['YWWWWWWy',
+             'yyyyyyyo'],
+    'enemy_shot': ['.LLLLLL.',
+                   'LTTTTTTL',
+                   'TTTTTTTT',
+                   '.DDDDDD.'],
+    'bomb_0': ['....hhmm',
+               '....mmdd',
+               'hhhhhhmm',
+               'mmmmmmdd',
+               '........',
+               '........'],
+    'bomb_1': ['........',
+               '........',
+               'hhhhhhmm',
+               'mmmmmmdd',
+               '....hhmm',
+               '....mmdd'],
+    'gun_shot_0': ['.SSSSSS.',
+                   'SSSSSSSs',
+                   'sSSSSSSs',
+                   '.ssssss.'],
+    'gun_shot_1': ['....kKKKKKk.',
+                   '...KKoKKKKKk',
+                   '.kKKKKKk....',
+                   'kKKoKKKKk...',
+                   '....kKKoKKk.',
+                   '...KKKKKKKk.',
+                   '.kKKKKKk....',
+                   '.kkkkkk.....'],
+}
+SMALL_COLOURS = {
+    '.': (0, 0, 0, 0),
+    'W': (255, 250, 210, 255), 'Y': (255, 255, 255, 255), 'y': (230, 190, 70, 255),
+    'o': (255, 140, 40, 255),
+    'L': (255, 255, 255, 255), 'T': (200, 200, 200, 255), 'D': (130, 130, 130, 255),
+    'h': (122, 128, 112, 255), 'm': (78, 84, 70, 255), 'd': (44, 48, 40, 255),
+    'S': (52, 50, 46, 255), 's': (24, 22, 20, 255),
+    'K': (34, 32, 30, 255), 'k': (70, 66, 60, 255),
+}
+
+
+def small(rows):
+    return [SMALL_COLOURS[c] for row in rows for c in row], len(rows[0]), len(rows)
 
 
 if __name__ == '__main__':

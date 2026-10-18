@@ -40,7 +40,8 @@ static void draw_gun_shot(BmFramebuffer *f,uint8_t atari_x,uint8_t atari_y,
   int y=bm_pm_y(atari_y);
   int dx,dy,width=4,height=2;
   if(!atari_y)return;
-  if(!sprite(BM_SPRITE_GUN_SHOT,explosion?1u:0u,x,explosion?y-4:y,0u,0u))return;
+  /* The burst's odd rows start two pixels further left: its box does. */
+  if(!sprite(BM_SPRITE_GUN_SHOT,explosion?1u:0u,explosion?x-2:x,explosion?y-4:y,0u,0u))return;
   if(explosion){
     /* FBRGN/FM2GN replace the two missile scanlines with four staggered
        scanlines for 25 frames.  Adjacent Atari missile lanes are one
@@ -632,7 +633,9 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
     int ship_x=bm_pm_x(g->classic_world.ship_x);
     int ship_y=bm_pm_y((int)g->classic_world.ship_y-11);
     if(sprite(BM_SPRITE_SHIP,g->classic_world.ship_destroyed?1u:0u,ship_x,
-              g->classic_world.ship_destroyed?ship_y-1:ship_y,p2_colour(g),0u)){
+              g->classic_world.ship_destroyed?ship_y-1:ship_y,
+              g->classic_world.ship_destroyed?
+                ((g->classic_world.ship_destroy_timer&8u)?0x2cu:0x36u):p2_colour(g),0u)){
       if(g->classic_world.ship_destroyed)
         /* Z6 writes XSHPIM to P2 rows C1-12..C1. */
         bm_sprite_blit_colour(f,&destroyed_ship,ship_x,ship_y-1,31u);
@@ -659,7 +662,9 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
     if(sprite(BM_SPRITE_VEHICLE,(g->classic_world.river_vehicle_truck?1u:0u)|
               (g->classic_world.river_car_left?2u:0u)|
               (g->classic_world.river_car_destroyed?4u:0u),car_x,
-              g->classic_world.river_car_destroyed?car_y-1:car_y,p2_colour(g),0u)){
+              g->classic_world.river_car_destroyed?car_y-1:car_y,
+              g->classic_world.river_car_destroyed?
+                ((g->classic_world.river_car_destroy_timer&4u)?0x2cu:0x36u):p2_colour(g),0u)){
       if(g->classic_world.river_car_destroyed){
         static const BmSprite wreck={bm_asset_crash,16,10,16,0,0};
         bm_sprite_blit_colour(f,&wreck,car_x,car_y-1,32u);
