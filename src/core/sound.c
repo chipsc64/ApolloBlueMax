@@ -217,12 +217,33 @@ static const BmSample *sample(const BmSoundOut *o,BmSampleId id){
 /* Levels for the example samples: about 1.2x the POKEY sound's loudness
    (the own gun 1.9x, approved on the V4); retune for real recordings. */
 static const uint16_t sample_gain[BM_SAMPLE_COUNT]={
-  128u,128u,128u,  /* engine, engine_dying, attacker_engine (T37c) */
+  54u,90u,16u,      /* engine, engine_dying (both at AUDC1 level 8; scaled
+                       by the level), attacker_engine */
   96u,54u,          /* gun_own, gun_enemy */
   75u,73u,          /* ground_gun, flak */
   14u,              /* bomb_whistle: the original whistle is soft */
   134u,213u,190u,   /* explosion_small, _medium, _large */
   72u,100u};        /* splash, runway */
+/* The propeller (AUDC1 $C0..$C8): with an engine sample the engine voice
+   loops it at the volume of AUDC1 (and a pitch that rises a little with
+   it, which the original does not do) and POKEY channel 1 stays silent.
+   The dying engine (KMKZ) has its own sample.  While PLAY.IT runs, channel
+   1 belongs to the tune.  Returns 0 when the POKEY plays the engine. */
+static int engine_sync(BmSound *s,const BmSoundOut *o,uint8_t audc1,uint8_t dying){
+  BmSampleId id=dying&&sample(o,BM_SAMPLE_ENGINE_DYING)?BM_SAMPLE_ENGINE_DYING:BM_SAMPLE_ENGINE;
+  const BmSample *x=sample(o,id);
+  uint8_t want=id==BM_SAMPLE_ENGINE_DYING?2u:1u;
+  unsigned level=(audc1>>4)==0xcu?audc1&15u:0u;
+  if(!x||s->music_on)return 0;
+  bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,0u);
+  if(want!=s->engine_sample||!bm_mixer_active(o->mixer,BM_VOICE_ENGINE)){
+    bm_mixer_play(o->mixer,BM_VOICE_ENGINE,x,1u,0u);
+    s->engine_sample=want;
+  }
+  bm_mixer_set(o->mixer,BM_VOICE_ENGINE,(uint16_t)(256+((int)level-4)*12),
+               (uint16_t)(sample_gain[id]*level/8u));
+  return 1;
+}
 /* Play a sample once (or looped) on a voice; 0 if there is none. */
 static int play(const BmSoundOut *o,BmSampleId id,unsigned voice,uint8_t loop){
   const BmSample *x=sample(o,id);
@@ -239,7 +260,8 @@ void bm_sound_event_power_on(BmSound *s,const BmSoundOut *o){
 void bm_sound_event_takeoff_engine(BmSound *s,const BmSoundOut *o){       /* AFX */
   BmPokey *k=main_pokey(o);
   bm_pokey_write(k,BM_POKEY_AUDF1,251u);bm_pokey_write(k,BM_POKEY_AUDF3,13u);
-  s->engine=0xc1u;bm_pokey_write(k,BM_POKEY_AUDC1,0xc1u);
+  s->engine=0xc1u;
+  if(!engine_sync(s,o,0xc1u,0u))bm_pokey_write(k,BM_POKEY_AUDC1,0xc1u);
 }
 void bm_sound_event_quiet(const BmSoundOut *o){
   unsigned g;for(g=0;g<BM_SOUND_GROUPS;++g)bm_sound_quiet(group(o,g));
@@ -247,6 +269,8 @@ void bm_sound_event_quiet(const BmSoundOut *o){
 }
 void bm_sound_event_demo_music(BmSound *s,const BmSoundOut *o){
   bm_sound_quiet(main_pokey(o));bm_sound_music_start(s);
+  /* QUIET silences every sound on the main POKEY: the voices too. */
+  if(o->mixer){bm_mixer_reset(o->mixer);s->gun_sample=s->bomb_sample=s->engine_sample=0u;}
 }
 void bm_sound_event_end_music(BmSound *s){bm_sound_music_start(s);}
 uint8_t bm_sound_event_vblank(BmSound *s,const BmSoundOut *o){
@@ -275,25 +299,47 @@ void bm_sound_event_crash(BmSound *s,const BmSoundOut *o){
   unsigned g;
   bm_sound_event_explosion(s,o,BM_EXPLOSION_CRASH);
   bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,0u);
+  engine_sync(s,o,0u,0u);
+  if(o->mixer)bm_mixer_stop(o->mixer,BM_VOICE_ATTACKER);
   for(g=BM_SOUND_MAIN;g<=BM_SOUND_BEEP;++g)bm_pokey_write(group(o,g),BM_POKEY_AUDC4,0u);
   if(o->mixer){bm_mixer_stop(o->mixer,BM_VOICE_GUN);s->gun_sample=0u;}  /* RO/QD */
 }
 
+/* The engine routines write AUDC1 as on the Atari; with an engine sample
+   the voice follows the new level and channel 1 is silenced again before
+   anything is rendered. */
 void bm_sound_event_engine(BmSound *s,const BmSoundOut *o,uint8_t stick){
   bm_sound_roar(s,main_pokey(o),stick);
+  engine_sync(s,o,s->engine,0u);
 }
 void bm_sound_event_engine_dead(BmSound *s,const BmSoundOut *o){
   bm_sound_engine_dying(s,main_pokey(o));
+  engine_sync(s,o,s->engine,1u);
 }
 void bm_sound_event_engine_idle(BmSound *s,const BmSoundOut *o){         /* GROUND */
-  if(s->engine>=0xc2u){--s->engine;bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,s->engine);}
+  if(s->engine>=0xc2u){
+    --s->engine;
+    if(!engine_sync(s,o,s->engine,0u))bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,s->engine);
+  }
 }
-void bm_sound_event_attacker(BmSound *s,const BmSoundOut *o,uint8_t flying){ /* PBMB */
-  bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,flying?0xc3u:s->engine);
+/* PBMB: AUDC1=$C3 while the attacker flies.  With its own sample the
+   attacker gets a voice and the own engine keeps sounding. */
+void bm_sound_event_attacker(BmSound *s,const BmSoundOut *o,uint8_t flying){
+  const BmSample *x=sample(o,BM_SAMPLE_ATTACKER_ENGINE);
+  if(x){
+    if(!flying)bm_mixer_stop(o->mixer,BM_VOICE_ATTACKER);
+    else if(!bm_mixer_active(o->mixer,BM_VOICE_ATTACKER))
+      play(o,BM_SAMPLE_ATTACKER_ENGINE,BM_VOICE_ATTACKER,1u);
+    if(!engine_sync(s,o,s->engine,0u))bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,s->engine);
+    return;
+  }
+  if(!engine_sync(s,o,flying?0xc3u:s->engine,0u))
+    bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,flying?0xc3u:s->engine);
 }
 uint8_t bm_sound_event_engine_stop_step(BmSound *s,const BmSoundOut *o){  /* STOPL .2 */
   if(s->engine==0xc0u)return 1u;
-  --s->engine;bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,s->engine);
+  --s->engine;
+  if(!engine_sync(s,o,s->engine,0u))bm_pokey_write(main_pokey(o),BM_POKEY_AUDC1,s->engine);
   return 0u;
 }
 

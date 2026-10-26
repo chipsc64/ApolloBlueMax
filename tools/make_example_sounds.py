@@ -10,7 +10,10 @@ ground_gun.wav, flak.wav    an anti-aircraft gun firing; its shell bursting.
 explosion_small/medium/large.wav  damage; aircraft and objects; bombs,
              crashes and the capital.
 bomb_whistle.wav  a falling bomb, stopped where it lands.
-splash.wav   a bomb in the water."""
+splash.wav   a bomb in the water.
+engine.wav, engine_dying.wav, attacker_engine.wav  seamless loops: the
+             propeller (volume and pitch follow the throttle), the engine
+             without fuel, an attacking aircraft."""
 import math
 import os
 import random
@@ -87,6 +90,41 @@ def splash(rng, seconds=1.2):
     return normalise(out)
 
 
+def circular_noise(rng, length, smooth):
+    """Low-passed noise that loops seamlessly: a moving average that wraps."""
+    raw = [rng.uniform(-1, 1) for _ in range(length)]
+    out, acc = [], sum(raw[-smooth:])
+    for i in range(length):
+        acc += raw[i] - raw[i - smooth]
+        out.append(acc / smooth)
+    return out
+
+
+def engine_loop(rng, hz, blades_hz, seconds=0.5, harmonics=8, odd_only=False,
+                gate=None):
+    """A propeller drone: whole cycles of a buzzy tone, pulsed at the blade
+    rate, with some wind noise; every period fits the loop exactly."""
+    length = int(RATE * seconds)
+    noise = circular_noise(rng, length, 24)
+    out = []
+    for i in range(length):
+        t = i / RATE
+        tone = sum(math.sin(2 * math.pi * hz * h * t) / h
+                   for h in range(1, harmonics + 1) if not (odd_only and h % 2 == 0))
+        pulse = 0.65 + 0.35 * math.sin(2 * math.pi * blades_hz * t)
+        v = tone * pulse + 1.5 * noise[i]
+        if gate:
+            v *= gate(t)
+        out.append(v)
+    return normalise(out)
+
+
+def sputter(t):
+    """The dying engine: firing and missing in an uneven but looping rhythm."""
+    beats = (0.00, 0.09, 0.15, 0.31, 0.38, 0.55, 0.71, 0.80)
+    return max(math.exp(-((t - b) % 1.0) * 18) for b in beats)
+
+
 def main(sound_dir):
     os.makedirs(sound_dir, exist_ok=True)
     rng = random.Random(1983)
@@ -100,6 +138,9 @@ def main(sound_dir):
         'explosion_large': noise_burst(rng, 2.2, 2.0, 0.2, 0.9, 38),
         'bomb_whistle': whistle(),
         'splash': splash(rng),
+        'engine': engine_loop(rng, 64, 16),
+        'engine_dying': engine_loop(rng, 52, 13, seconds=1.0, gate=sputter),
+        'attacker_engine': engine_loop(rng, 90, 30, odd_only=True),
     }
     for name, values in sounds.items():
         write_wav(os.path.join(sound_dir, name + '.wav'), values)

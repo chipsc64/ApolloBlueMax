@@ -215,6 +215,50 @@ int main(void){
     bm_sound_event_bomb_release(&snd,&o);
     check(k.audf[1]==0x14u&&k.audc[1]==0xa2u,"without the mixer: the POKEY whistle");
   }
+  /* T37c: the engine voice follows AUDC1; KMKZ switches to the dying
+     engine; the attacker has its own voice; PLAY.IT keeps channel 1. */
+  if(bm_samples[BM_SAMPLE_ENGINE]){
+    BmSound snd;BmMixer m;BmSoundOut o;unsigned g,n;uint16_t quiet;
+    for(g=0;g<BM_SOUND_GROUPS;++g)o.pokey[g]=&k;
+    o.separate=0u;o.mixer=&m;
+    bm_pokey_reset(&k);bm_sound_reset(&snd);bm_mixer_reset(&m);
+    bm_sound_event_takeoff_engine(&snd,&o);
+    check(bm_mixer_active(&m,BM_VOICE_ENGINE)&&m.voice[BM_VOICE_ENGINE].loop&&
+          k.audc[0]==0u&&snd.engine==0xc1u,"engine: the sample loops, channel 1 silent");
+    quiet=m.voice[BM_VOICE_ENGINE].volume;
+    for(n=0;n<200u;++n)bm_sound_event_engine(&snd,&o,6u);   /* full throttle */
+    /* Level 8 against level 1 (rounded down). */
+    check(snd.engine==0xc8u&&m.voice[BM_VOICE_ENGINE].volume>=8u*quiet&&
+          m.voice[BM_VOICE_ENGINE].volume<8u*(quiet+1u)&&
+          m.voice[BM_VOICE_ENGINE].pitch>256u&&k.audc[0]==0u,
+          "engine: volume and pitch follow ROAR up to $C8");
+    if(bm_samples[BM_SAMPLE_ENGINE_DYING]){
+      bm_sound_event_engine_dead(&snd,&o);
+      check(snd.engine_sample==2u&&bm_mixer_active(&m,BM_VOICE_ENGINE),
+            "engine out of fuel: the dying sample");
+      bm_sound_event_engine(&snd,&o,15u);
+      check(snd.engine_sample==1u,"engine refuelled: the running sample again");
+    }
+    if(bm_samples[BM_SAMPLE_ATTACKER_ENGINE]){
+      uint16_t own=m.voice[BM_VOICE_ENGINE].volume;
+      bm_sound_event_attacker(&snd,&o,1u);
+      check(bm_mixer_active(&m,BM_VOICE_ATTACKER)&&k.audc[0]==0u&&own&&
+            m.voice[BM_VOICE_ENGINE].volume==own,
+            "attacker: its own voice, the own engine keeps sounding");
+      bm_sound_event_attacker(&snd,&o,0u);
+      check(!bm_mixer_active(&m,BM_VOICE_ATTACKER),"attacker gone: its voice stops");
+    }
+    bm_sound_event_crash(&snd,&o);
+    check(m.voice[BM_VOICE_ENGINE].volume==0u&&k.audc[0]==0u,"crash: the engine is silent");
+    bm_sound_event_takeoff_engine(&snd,&o);bm_sound_event_demo_music(&snd,&o);
+    check(!bm_mixer_active(&m,BM_VOICE_ENGINE),"the demo tune's QUIET stops the engine voice");
+    snd.music_on=1u;snd.engine=0xc5u;bm_sound_event_engine_idle(&snd,&o);
+    check(k.audc[0]==0xc4u&&!bm_mixer_active(&m,BM_VOICE_ENGINE),
+          "during PLAY.IT the POKEY keeps channel 1");
+    o.mixer=0;bm_pokey_reset(&k);bm_sound_reset(&snd);
+    bm_sound_event_takeoff_engine(&snd,&o);
+    check(k.audc[0]==0xc1u,"without the mixer: the POKEY engine");
+  }
   if(failures){printf("%d pokey test(s) failed\n",failures);return 1;}
   printf("pokey tests passed\n");return 0;
 }

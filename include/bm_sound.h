@@ -28,8 +28,9 @@ typedef struct {
   uint8_t music_status[3],music_duration[3],music_volume[3],music_tie[3];
   uint16_t music_position[3];
   /* SOUND=samples: the gun voice plays the own (1) or the enemy (2) gun;
-     the bomb voice plays the whistle. */
-  uint8_t gun_sample,bomb_sample;
+     the bomb voice plays the whistle; the engine voice the running (1) or
+     the dying (2) engine. */
+  uint8_t gun_sample,bomb_sample,engine_sample;
 } BmSound;
 void bm_sound_reset(BmSound *s);
 /* EXXON.6 XSND: once per VBI. */

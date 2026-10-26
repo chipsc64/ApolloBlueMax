@@ -184,6 +184,9 @@ stereo, at any rate (44100 Hz recommended), at most 10 seconds;
 
 | NAME | Sound |
 |---|---|
+| `engine` | the propeller, looped; its volume follows the throttle as on the Atari, its pitch rises a little with it |
+| `engine_dying` | the engine without fuel, looped until it stops |
+| `attacker_engine` | an attacking aircraft over the airfield, looped; the own engine keeps sounding |
 | `gun_own` | the player's machine gun: one shot, looped while firing |
 | `gun_enemy` | an enemy fighter's gun: one shot, looped while it fires |
 | `ground_gun` | an anti-aircraft gun firing |
@@ -195,7 +198,8 @@ stereo, at any rate (44100 Hz recommended), at most 10 seconds;
 | `splash` | a bomb in the water |
 
 The files in `sounds/` are generated examples (`tools/make_example_sounds.py`);
-replace them with real recordings. The engine sounds follow.
+replace them with real recordings. While the title tune plays, its POKEY
+channels are left alone.
 
 ### 50 Hz
 
