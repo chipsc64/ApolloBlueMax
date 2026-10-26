@@ -196,10 +196,17 @@ stereo, at any rate (44100 Hz recommended), at most 10 seconds;
 | `explosion_large` | a bomb, the capital target, the player's crash |
 | `bomb_whistle` | a falling bomb; stopped where it lands (behind roofs it runs on into the explosion) |
 | `splash` | a bomb in the water |
+| `runway` | the signal when a friendly runway comes into view |
 
 The files in `sounds/` are generated examples (`tools/make_example_sounds.py`);
 replace them with real recordings. While the title tune plays, its POKEY
-channels are left alone.
+channels are left alone. The title tune and the warning tones (low altitude,
+enemy in line, aircraft warning, landing marker, repair beep) always stay
+POKEY sounds.
+
+At start the Apollo build checks the mixer on fixed input and prints
+`mixer self-test passed`. With `SOUND_TEST=1` it also prints, on exit, how
+many samples were started and their peak level.
 
 ### 50 Hz
 

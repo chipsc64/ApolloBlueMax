@@ -223,7 +223,7 @@ static const uint16_t sample_gain[BM_SAMPLE_COUNT]={
   75u,73u,          /* ground_gun, flak */
   14u,              /* bomb_whistle: the original whistle is soft */
   134u,213u,190u,   /* explosion_small, _medium, _large */
-  72u,100u};        /* splash, runway */
+  72u,17u};         /* splash, runway (the friendly runway's signal) */
 /* The propeller (AUDC1 $C0..$C8): with an engine sample the engine voice
    loops it at a volume that follows AUDC1 (and a pitch that rises a little with
    it, which the original does not do) and POKEY channel 1 stays silent.
@@ -396,6 +396,8 @@ void bm_sound_event_update(BmSound *s,const BmSoundOut *o){
   /* A fresh ground gun shot ($6AF=12) plays its sample instead. */
   if(s->ground_gun==12u&&play(o,BM_SAMPLE_GROUND_GUN,BM_VOICE_GROUND_GUN,0u))s->ground_gun=0u;
   bm_sound_ggnsnd(s,group(o,BM_SOUND_GROUND_GUN));
+  /* A friendly runway in view ($64C=$19): its signal sample instead. */
+  if(s->runway==0x19u&&play(o,BM_SAMPLE_RUNWAY,BM_VOICE_RUNWAY,0u))s->runway=0u;
   bm_sound_runsnd(s,group(o,BM_SOUND_BEEP));
   cdrp_event(s,o);
 }

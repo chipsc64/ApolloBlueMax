@@ -13,7 +13,9 @@ bomb_whistle.wav  a falling bomb, stopped where it lands.
 splash.wav   a bomb in the water.
 engine.wav, engine_dying.wav, attacker_engine.wav  seamless loops: the
              propeller (volume and pitch follow the throttle), the engine
-             without fuel, an attacking aircraft."""
+             without fuel, an attacking aircraft.
+runway.wav   the signal when a friendly runway comes into view (the
+             original alternates two tones)."""
 import math
 import os
 import random
@@ -125,6 +127,17 @@ def sputter(t):
     return max(math.exp(-((t - b) % 1.0) * 18) for b in beats)
 
 
+def chime(seconds=0.42):
+    """Two alternating tones, like RUNSND's AUDF4 10/25 pair, softened."""
+    out = []
+    for i in range(int(RATE * seconds)):
+        t = i / RATE
+        f = 1320 if int(t * 1000 / 70) % 2 == 0 else 880
+        env = min(1.0, t * 200) * min(1.0, (seconds - t) * 40)
+        out.append(env * (math.sin(2 * math.pi * f * t) + 0.25 * math.sin(4 * math.pi * f * t)))
+    return normalise(out)
+
+
 def main(sound_dir):
     os.makedirs(sound_dir, exist_ok=True)
     rng = random.Random(1983)
@@ -141,6 +154,7 @@ def main(sound_dir):
         'engine': engine_loop(rng, 64, 16),
         'engine_dying': engine_loop(rng, 52, 13, seconds=1.0, gate=sputter),
         'attacker_engine': engine_loop(rng, 90, 30, odd_only=True),
+        'runway': chime(),
     }
     for name, values in sounds.items():
         write_wav(os.path.join(sound_dir, name + '.wav'), values)

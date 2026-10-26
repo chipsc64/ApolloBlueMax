@@ -118,6 +118,7 @@ int main(void){
     check(n+1u==2713u&&!snd.music_on&&!k.audc[0]&&!k.audc[1]&&!k.audc[2],
           "PLAY.IT length and STOP.SN");
   }
+  check(bm_mixer_selftest()==0,"mixer self-test (also run on the Apollo)");
   /* T37a: the sample mixer. */
   { static const int16_t ramp[4]={1000,2000,3000,4000};
     static const BmSample once={ramp,4u,RATE},slow={ramp,4u,RATE/2u};
@@ -207,6 +208,11 @@ int main(void){
       bm_sound_event_bomb_release(&snd,&o);bm_sound_event_bomb_lands(&snd,&o,BM_BOMB_WATER);
       check(bm_mixer_active(&m,BM_VOICE_SPLASH)&&!snd.splash&&k.audc[1]==0u,
             "bomb in water: splash sample instead of SPLASH");
+    }
+    if(bm_samples[BM_SAMPLE_RUNWAY]){
+      bm_pokey_reset(&k);bm_sound_event_runway(&snd);bm_sound_event_update(&snd,&o);
+      check(bm_mixer_active(&m,BM_VOICE_RUNWAY)&&!snd.runway&&k.audc[3]==0u,
+            "runway in view: the signal sample instead of RUNSND");
     }
     /* Without the mixer every event is the POKEY routine. */
     o.mixer=0;bm_pokey_reset(&k);bm_sound_reset(&snd);

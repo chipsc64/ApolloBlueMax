@@ -140,6 +140,11 @@ static int saga_open(BmPlatform *p,const BmFrame *frame){
     ammx_result=bm_ammx_selftest();
     if(ammx_result!=0){printf("Blue Max: AMMX self-test failed (%d)\n",ammx_result);return -1;}
     printf("Blue Max: AMMX self-test passed\n");
+#if BM_SOUND_SAMPLES
+    { int mixer_result=bm_mixer_selftest();
+      if(mixer_result)printf("Blue Max: mixer self-test FAILED (%d)\n",mixer_result);
+      else printf("Blue Max: mixer self-test passed\n"); }
+#endif
     bm_sprite_set_blitter(bm_sprite_blit_ammx);
     /* The 640x400 conversion: AMMX only when it matches the C reference. */
     if(bm_ammx_row_selftest()==0)bm_ammx_install_row_converters();

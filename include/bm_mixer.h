@@ -25,6 +25,11 @@ void bm_mixer_release(BmMixer *m,unsigned voice);
 void bm_mixer_stop(BmMixer *m,unsigned voice);
 void bm_mixer_set(BmMixer *m,unsigned voice,uint16_t pitch,uint16_t volume);
 uint8_t bm_mixer_active(const BmMixer *m,unsigned voice);
+/* Runs the mixer on fixed input: stepping, rate conversion, looping and
+   saturation at both ends.  0 when right, else the failing check (1..6).
+   The Apollo build runs it at start: host tests cannot see 68080 code
+   generation (see the 64-bit step bug). */
+int bm_mixer_selftest(void);
 /* Add count samples at rate (Hz) to out, saturating. */
 void bm_mixer_render(BmMixer *m,int16_t *out,unsigned count,uint32_t rate);
 #endif

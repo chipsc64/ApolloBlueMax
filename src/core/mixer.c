@@ -54,3 +54,26 @@ void bm_mixer_render(BmMixer *m,int16_t *out,unsigned count,uint32_t rate){
     v->index=index;v->frac=frac;
   }
 }
+
+int bm_mixer_selftest(void){
+  static const int16_t ramp[4]={1000,2000,3000,4000},loud[2]={20000,-20000};
+  static const BmSample once={ramp,4u,44100u},half={ramp,4u,22050u},
+                        peak={loud,2u,44100u};
+  BmMixer m;int16_t out[8];unsigned i;
+  bm_mixer_reset(&m);
+  for(i=0;i<8u;++i)out[i]=0;
+  bm_mixer_play(&m,0u,&once,0u,256u);bm_mixer_render(&m,out,8u,44100u);
+  if(out[0]!=1000||out[3]!=4000||out[4]!=0)return 1;           /* stepping */
+  if(bm_mixer_active(&m,0u))return 2;                             /* the end */
+  for(i=0;i<8u;++i)out[i]=0;
+  bm_mixer_play(&m,0u,&half,0u,256u);bm_mixer_render(&m,out,8u,44100u);
+  if(out[0]!=1000||out[1]!=1000||out[2]!=2000||out[7]!=4000)return 3;  /* rate */
+  for(i=0;i<8u;++i)out[i]=0;
+  bm_mixer_play(&m,0u,&once,1u,128u);bm_mixer_render(&m,out,8u,44100u);
+  if(out[4]!=500||out[7]!=2000)return 4;                          /* loop */
+  out[0]=30000;out[1]=-30000;out[2]=100;out[3]=-100;
+  bm_mixer_play(&m,0u,&peak,1u,256u);bm_mixer_render(&m,out,4u,44100u);
+  if(out[0]!=32767||out[1]!=-32768)return 5;                      /* saturation */
+  if(out[2]!=20100||out[3]!=-20100)return 6;                      /* in range */
+  return 0;
+}
