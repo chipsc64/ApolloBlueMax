@@ -7,7 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <proto/exec.h>
+#include <proto/intuition.h>
 #include <proto/timer.h>
+#include <intuition/intuition.h>
 #include <devices/timer.h>
 #include <exec/interrupts.h>
 #include <exec/memory.h>
@@ -72,6 +74,39 @@ static struct Interrupt vblank_interrupt;
 
 /* timer.device's E-clock (~709 kHz) is the audio position clock. */
 struct Device *TimerBase;
+struct IntuitionBase *IntuitionBase;
+
+/* The mouse pointer: the game takes the display over, but for the OS the
+   Workbench screen stays in front and Intuition keeps drawing its pointer.
+   A borderless window over the whole Workbench screen, active and with an
+   empty pointer, hides it; it also takes the keys the Shell would get and
+   keeps the right mouse button from opening menus.  Closing it restores
+   the Workbench pointer. */
+static struct Window *pointer_window;
+static UWORD *blank_pointer;    /* chip RAM: sprite control words + 1 empty line */
+static void pointer_hide(void){
+    struct Screen *screen;
+    IntuitionBase=(struct IntuitionBase*)OpenLibrary((CONST_STRPTR)"intuition.library",36);
+    if(!IntuitionBase)return;
+    screen=LockPubScreen(0);
+    if(!screen)return;
+    pointer_window=OpenWindowTags(0,WA_PubScreen,(ULONG)screen,WA_Left,0,WA_Top,0,
+        WA_Width,(ULONG)screen->Width,WA_Height,(ULONG)screen->Height,
+        WA_Borderless,TRUE,WA_Activate,TRUE,WA_RMBTrap,TRUE,
+        WA_SimpleRefresh,TRUE,WA_NoCareRefresh,TRUE,WA_Backdrop,FALSE,TAG_END);
+    UnlockPubScreen(0,screen);
+    if(!pointer_window)return;
+    blank_pointer=(UWORD*)AllocMem(6u*sizeof(UWORD),MEMF_CHIP|MEMF_CLEAR);
+    if(blank_pointer)SetPointer(pointer_window,blank_pointer,1,16,0,0);
+}
+static void pointer_show(void){
+    if(pointer_window){
+        if(blank_pointer)ClearPointer(pointer_window);
+        CloseWindow(pointer_window);pointer_window=0;
+    }
+    if(blank_pointer){FreeMem(blank_pointer,6u*sizeof(UWORD));blank_pointer=0;}
+    if(IntuitionBase){CloseLibrary((struct Library*)IntuitionBase);IntuitionBase=0;}
+}
 static struct timerequest eclock_request;
 static uint32_t eclock_hz;
 static uint64_t eclock64(void){
@@ -171,7 +206,9 @@ static int saga_open(BmPlatform *p,const BmFrame *frame){
        the display pointer is made live. */
     REG16(SAGA_MODULO_WRITE)=0;REG16(SAGA_MODE_WRITE)=mode;
     if(saga.format.pixel==BM_PIXEL_CLUT8)upload_changed_palette();
-    REG32(SAGA_POINTER_WRITE)=(uint32_t)(uintptr_t)saga.video[saga.shown];p->userdata=&saga;return 0;
+    REG32(SAGA_POINTER_WRITE)=(uint32_t)(uintptr_t)saga.video[saga.shown];p->userdata=&saga;
+    pointer_hide();
+    return 0;
 }
 
 /* Keyboard: the OS keyboard handler acknowledges every byte, but CIA-A SDR
@@ -408,6 +445,7 @@ static void saga_close(BmPlatform *p){
     if(s->timer_open){CloseDevice((struct IORequest*)&eclock_request);TimerBase=0;}
     RemIntServer(INTB_VERTB,&vblank_interrupt);
     REG16(SAGA_MODULO_WRITE)=s->saved_modulo;
+    pointer_show();             /* Workbench redraws itself behind the window */
     REG32(SAGA_POINTER_WRITE)=s->saved_pointer;REG16(SAGA_MODE_WRITE)=s->saved_mode;
     bm_sprite_set_blitter(0);
     bm_render_set_converters(0,0);
