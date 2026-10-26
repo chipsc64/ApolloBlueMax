@@ -227,9 +227,9 @@ int main(void){
           k.audc[0]==0u&&snd.engine==0xc1u,"engine: the sample loops, channel 1 silent");
     quiet=m.voice[BM_VOICE_ENGINE].volume;
     for(n=0;n<200u;++n)bm_sound_event_engine(&snd,&o,6u);   /* full throttle */
-    /* Level 8 against level 1 (rounded down). */
-    check(snd.engine==0xc8u&&m.voice[BM_VOICE_ENGINE].volume>=8u*quiet&&
-          m.voice[BM_VOICE_ENGINE].volume<8u*(quiet+1u)&&
+    /* Level 8 is the full level, level 1 (idle) 3/10 of it. */
+    check(snd.engine==0xc8u&&quiet&&m.voice[BM_VOICE_ENGINE].volume*3u>=quiet*10u&&
+          m.voice[BM_VOICE_ENGINE].volume*3u<(quiet+1u)*10u&&
           m.voice[BM_VOICE_ENGINE].pitch>256u&&k.audc[0]==0u,
           "engine: volume and pitch follow ROAR up to $C8");
     if(bm_samples[BM_SAMPLE_ENGINE_DYING]){

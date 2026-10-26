@@ -217,15 +217,15 @@ static const BmSample *sample(const BmSoundOut *o,BmSampleId id){
 /* Levels for the example samples: about 1.2x the POKEY sound's loudness
    (the own gun 1.9x, approved on the V4); retune for real recordings. */
 static const uint16_t sample_gain[BM_SAMPLE_COUNT]={
-  54u,90u,16u,      /* engine, engine_dying (both at AUDC1 level 8; scaled
-                       by the level), attacker_engine */
+  54u,90u,16u,      /* engine, engine_dying (at AUDC1 level 8, less with a
+                       lower level), attacker_engine */
   96u,54u,          /* gun_own, gun_enemy */
   75u,73u,          /* ground_gun, flak */
   14u,              /* bomb_whistle: the original whistle is soft */
   134u,213u,190u,   /* explosion_small, _medium, _large */
   72u,100u};        /* splash, runway */
 /* The propeller (AUDC1 $C0..$C8): with an engine sample the engine voice
-   loops it at the volume of AUDC1 (and a pitch that rises a little with
+   loops it at a volume that follows AUDC1 (and a pitch that rises a little with
    it, which the original does not do) and POKEY channel 1 stays silent.
    The dying engine (KMKZ) has its own sample.  While PLAY.IT runs, channel
    1 belongs to the tune.  Returns 0 when the POKEY plays the engine. */
@@ -240,8 +240,10 @@ static int engine_sync(BmSound *s,const BmSoundOut *o,uint8_t audc1,uint8_t dyin
     bm_mixer_play(o->mixer,BM_VOICE_ENGINE,x,1u,0u);
     s->engine_sample=want;
   }
+  /* Volume (level+2)/10: full at $C8, but idling on the ground ($C1)
+     stays audible (3/10 instead of 1/8). */
   bm_mixer_set(o->mixer,BM_VOICE_ENGINE,(uint16_t)(256+((int)level-4)*12),
-               (uint16_t)(sample_gain[id]*level/8u));
+               (uint16_t)(level?sample_gain[id]*(level+2u)/10u:0u));
   return 1;
 }
 /* Play a sample once (or looped) on a voice; 0 if there is none. */
