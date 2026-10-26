@@ -272,7 +272,10 @@ void bm_sound_event_quiet(const BmSoundOut *o){
 void bm_sound_event_demo_music(BmSound *s,const BmSoundOut *o){
   bm_sound_quiet(main_pokey(o));bm_sound_music_start(s);
   /* QUIET silences every sound on the main POKEY: the voices too. */
-  if(o->mixer){bm_mixer_reset(o->mixer);s->gun_sample=s->bomb_sample=s->engine_sample=0u;}
+  if(o->mixer){
+    bm_mixer_reset(o->mixer);
+    s->own_firing=s->enemy_firing=s->gun_sample=s->bomb_sample=s->engine_sample=0u;
+  }
 }
 void bm_sound_event_end_music(BmSound *s){bm_sound_music_start(s);}
 uint8_t bm_sound_event_vblank(BmSound *s,const BmSoundOut *o){
@@ -304,7 +307,10 @@ void bm_sound_event_crash(BmSound *s,const BmSoundOut *o){
   engine_sync(s,o,0u,0u);
   if(o->mixer)bm_mixer_stop(o->mixer,BM_VOICE_ATTACKER);
   for(g=BM_SOUND_MAIN;g<=BM_SOUND_BEEP;++g)bm_pokey_write(group(o,g),BM_POKEY_AUDC4,0u);
-  if(o->mixer){bm_mixer_stop(o->mixer,BM_VOICE_GUN);s->gun_sample=0u;}  /* RO/QD */
+  if(o->mixer){                                   /* RO/QD */
+    bm_mixer_stop(o->mixer,BM_VOICE_GUN);bm_mixer_stop(o->mixer,BM_VOICE_ENEMY_GUN);
+    s->own_firing=s->enemy_firing=s->gun_sample=0u;
+  }
 }
 
 /* The engine routines write AUDC1 as on the Atari; with an engine sample
@@ -345,29 +351,35 @@ uint8_t bm_sound_event_engine_stop_step(BmSound *s,const BmSoundOut *o){  /* STO
   return 0u;
 }
 
-void bm_sound_event_enemy_shot(BmSound *s){s->gun=0x30u;}
-void bm_sound_event_own_shot(BmSound *s){s->gun=3u;}
-void bm_sound_event_shot_end(BmSound *s){s->gun=255u;}
+void bm_sound_event_enemy_shot(BmSound *s){s->gun=0x30u;s->enemy_firing=1u;}
+void bm_sound_event_own_shot(BmSound *s){s->gun=3u;s->own_firing=1u;}
+void bm_sound_event_shot_end(BmSound *s){s->gun=255u;s->enemy_firing=0u;}
+void bm_sound_event_own_shot_end(BmSound *s){s->gun=255u;s->own_firing=0u;}
 void bm_sound_event_ground_gun(BmSound *s){s->ground_gun=12u;}
 void bm_sound_event_runway(BmSound *s){s->runway=0x19u;}
 
-/* The guns ($648): the own (3) or the enemy (0x30) gun loops its sample
-   while it fires; POKEY channel 4 stays silent meanwhile and RO's tail
-   (255/254) is not needed.  A gun without a sample stays POKEY. */
+/* A looped sample on its voice while on; at the end it plays out its pass. */
+static void loop_voice(const BmSoundOut *o,unsigned voice,BmSampleId id,uint8_t on){
+  const BmVoice *v=&o->mixer->voice[voice];
+  if(on){if(!v->active||!v->loop)play(o,id,voice,1u);}
+  else if(v->active&&v->loop)bm_mixer_release(o->mixer,voice);
+}
+/* The guns with samples: each gun loops its sample while it fires, on its
+   own voice, whatever happens to $648 (a warning or the other gun's shot
+   ends it on the Atari).  $648 still drives POKEY channel 4 for a gun
+   without a sample; while it belongs to a sampled gun the channel is
+   silent and RO's tail (255/254) is skipped. */
 static void gun_samples(BmSound *s,const BmSoundOut *o){
-  uint8_t want=s->gun==3u&&sample(o,BM_SAMPLE_GUN_OWN)?1u:
-               (s->gun==0x30u&&sample(o,BM_SAMPLE_GUN_ENEMY)?2u:0u);
-  if(want){
-    if(want!=s->gun_sample||!bm_mixer_active(o->mixer,BM_VOICE_GUN)){
-      bm_pokey_write(group(o,BM_SOUND_GUN),BM_POKEY_AUDC4,0u);
-      play(o,want==1u?BM_SAMPLE_GUN_OWN:BM_SAMPLE_GUN_ENEMY,BM_VOICE_GUN,1u);
-      s->gun_sample=want;
-    }
-  }else if(s->gun_sample){
-    bm_mixer_release(o->mixer,BM_VOICE_GUN);
-    s->gun_sample=0u;
-    if(s->gun>=254u)s->gun=0u;
-  }
+  uint8_t own=(uint8_t)(sample(o,BM_SAMPLE_GUN_OWN)!=0),
+          enemy=(uint8_t)(sample(o,BM_SAMPLE_GUN_ENEMY)!=0);
+  if(own)loop_voice(o,BM_VOICE_GUN,BM_SAMPLE_GUN_OWN,s->own_firing);
+  if(enemy)loop_voice(o,BM_VOICE_ENEMY_GUN,BM_SAMPLE_GUN_ENEMY,s->enemy_firing);
+  if(s->gun==3u||s->gun==0x30u){
+    uint8_t pokey_gun=(uint8_t)(s->gun_last&&!s->gun_sample);  /* still sounding */
+    s->gun_sample=s->gun==3u?own:enemy;
+    if(s->gun_sample&&pokey_gun)bm_pokey_write(group(o,BM_SOUND_GUN),BM_POKEY_AUDC4,0u);
+  }else if(s->gun>=254u&&s->gun_sample)s->gun=0u;
+  s->gun_last=s->gun;
 }
 /* AFF: the whistle ends in the bomb explosion. */
 static void drop_end_event(BmSound *s,const BmSoundOut *o){

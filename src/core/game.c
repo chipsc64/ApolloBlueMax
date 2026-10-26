@@ -1372,7 +1372,7 @@ void bm_game_tick(BmGame *g,const BmInput *in){
   /* MAX.1 TRIG: $648=3 when the own shot starts ($19B3), 255 when it ends
      (HG, $19EA); GUNSND crackles in between. */
   if(!own&&g->player_shot_active)bm_sound_event_own_shot(&g->sound);
-  else if(own&&!g->player_shot_active)bm_sound_event_shot_end(&g->sound);
+  else if(own&&!g->player_shot_active)bm_sound_event_own_shot_end(&g->sound);
   /* The VBI: XSND, and timer 1 runs PLAY.IT; the demo's tune ends in AFX. */
   if(bm_sound_event_vblank(&g->sound,o)&&g->music_wait){
     g->music_wait=0u;bm_sound_event_takeoff_engine(&g->sound,o);

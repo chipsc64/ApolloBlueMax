@@ -151,15 +151,29 @@ int main(void){
     for(n=0;n<8u;++n)bm_sound_event_update(&snd,&o);
     check(bm_mixer_active(&m,BM_VOICE_GUN)&&m.voice[BM_VOICE_GUN].loop&&k.audc[3]==0u,
           "own gun: sample loops, POKEY channel 4 silent");
-    bm_sound_event_shot_end(&snd);bm_sound_event_update(&snd,&o);
-    check(!m.voice[BM_VOICE_GUN].loop&&snd.gun==0u&&k.audc[3]==0u,"own gun: released at RO");
+    /* A warning or the end of an enemy shot ends $648 on the Atari; the
+       own gun sample keeps going until the own shot ends. */
+    bm_sound_event_warning(&snd,&o,1u);bm_sound_event_shot_end(&snd);
+    for(n=0;n<4u;++n)bm_sound_event_update(&snd,&o);
+    check(bm_mixer_active(&m,BM_VOICE_GUN)&&m.voice[BM_VOICE_GUN].loop,
+          "own gun: a warning or another shot's end does not stop it");
+    bm_sound_event_own_shot_end(&snd);bm_sound_event_update(&snd,&o);
+    check(!m.voice[BM_VOICE_GUN].loop&&snd.gun==0u,"own gun: released when the own shot ends");
     bm_sound_event_enemy_shot(&snd);for(n=0;n<4u;++n)bm_sound_event_update(&snd,&o);
-    if(bm_samples[BM_SAMPLE_GUN_ENEMY])
+    if(bm_samples[BM_SAMPLE_GUN_ENEMY]){
       /* sound.c has its own copy of the (static) sample: compare data. */
-      check(snd.gun_sample==2u&&m.voice[BM_VOICE_GUN].sample->length==
-            bm_samples[BM_SAMPLE_GUN_ENEMY]->length&&
-            !memcmp(m.voice[BM_VOICE_GUN].sample->data,bm_samples[BM_SAMPLE_GUN_ENEMY]->data,64u)&&
-            k.audc[3]==0u,"enemy gun: its own sample on the gun voice");
+      check(bm_mixer_active(&m,BM_VOICE_ENEMY_GUN)&&m.voice[BM_VOICE_ENEMY_GUN].loop&&
+            m.voice[BM_VOICE_ENEMY_GUN].sample->length==bm_samples[BM_SAMPLE_GUN_ENEMY]->length&&
+            !memcmp(m.voice[BM_VOICE_ENEMY_GUN].sample->data,bm_samples[BM_SAMPLE_GUN_ENEMY]->data,64u)&&
+            k.audf[3]!=50u,"enemy gun: its own sample on its own voice, no GUNSND");
+      bm_sound_event_own_shot(&snd);for(n=0;n<2u;++n)bm_sound_event_update(&snd,&o);
+      check(bm_mixer_active(&m,BM_VOICE_GUN)&&m.voice[BM_VOICE_ENEMY_GUN].loop,
+            "both guns sound together");
+      bm_sound_event_shot_end(&snd);bm_sound_event_update(&snd,&o);
+      check(!m.voice[BM_VOICE_ENEMY_GUN].loop&&m.voice[BM_VOICE_GUN].loop,
+            "the enemy shot's end stops only the enemy gun");
+      bm_sound_event_own_shot_end(&snd);bm_sound_event_update(&snd,&o);
+    }
     else check(k.audc[3]!=0u,"enemy gun without a sample stays POKEY");
     o.mixer=0;bm_pokey_reset(&k);bm_sound_reset(&snd);
     bm_sound_event_own_shot(&snd);for(n=0;n<4u;++n)bm_sound_event_update(&snd,&o);

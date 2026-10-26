@@ -27,10 +27,12 @@ typedef struct {
   uint8_t music_on;      /* CDTMR1 ($218) running */
   uint8_t music_status[3],music_duration[3],music_volume[3],music_tie[3];
   uint16_t music_position[3];
-  /* SOUND=samples: the gun voice plays the own (1) or the enemy (2) gun;
-     the bomb voice plays the whistle; the engine voice the running (1) or
-     the dying (2) engine. */
-  uint8_t gun_sample,bomb_sample,engine_sample;
+  /* SOUND=samples: own_firing/enemy_firing keep the two gun voices going
+     (unlike $648, which a warning or another shot ends); gun_sample: $648
+     belongs to a gun with a sample, so the POKEY stays silent; gun_last:
+     $648 at the last update.  The bomb voice plays the whistle; the engine
+     voice the running (1) or the dying (2) engine. */
+  uint8_t own_firing,enemy_firing,gun_sample,gun_last,bomb_sample,engine_sample;
 } BmSound;
 void bm_sound_reset(BmSound *s);
 /* EXXON.6 XSND: once per VBI. */
@@ -86,7 +88,8 @@ typedef enum { BM_SAMPLE_ENGINE, BM_SAMPLE_ENGINE_DYING, BM_SAMPLE_ATTACKER_ENGI
   BM_SAMPLE_EXPLOSION_LARGE, BM_SAMPLE_SPLASH, BM_SAMPLE_RUNWAY,
   BM_SAMPLE_COUNT } BmSampleId;
 enum { BM_VOICE_ENGINE, BM_VOICE_ATTACKER, BM_VOICE_GUN, BM_VOICE_GROUND_GUN,
-  BM_VOICE_FLAK, BM_VOICE_BOMB, BM_VOICE_EXPLOSION, BM_VOICE_SPLASH, BM_VOICE_RUNWAY };
+  BM_VOICE_FLAK, BM_VOICE_BOMB, BM_VOICE_EXPLOSION, BM_VOICE_SPLASH, BM_VOICE_RUNWAY,
+  BM_VOICE_ENEMY_GUN };
 
 /* XXX callers, with their limit/volume. */
 typedef enum { BM_EXPLOSION_CRASH, BM_EXPLOSION_DAMAGE, BM_EXPLOSION_AIRCRAFT,
@@ -120,10 +123,12 @@ void bm_sound_event_engine_idle(BmSound *s,const BmSoundOut *o);
 void bm_sound_event_attacker(BmSound *s,const BmSoundOut *o,uint8_t flying);
 uint8_t bm_sound_event_engine_stop_step(BmSound *s,const BmSoundOut *o);
 /* Machine guns ($648): a shot starts (enemy RN $30, own TRIG 3) or ends
-   (RO/HG 255). */
+   (RO, VB, BMBSHP 255: the enemy gun sample stops too). */
 void bm_sound_event_enemy_shot(BmSound *s);
 void bm_sound_event_own_shot(BmSound *s);
 void bm_sound_event_shot_end(BmSound *s);
+/* The own shot ends (HG): $648=255 as above, and the own gun sample stops. */
+void bm_sound_event_own_shot_end(BmSound *s);
 /* A ground gun fires ($6AF=12); a runway appears (R3: $64C=$19). */
 void bm_sound_event_ground_gun(BmSound *s);
 void bm_sound_event_runway(BmSound *s);
