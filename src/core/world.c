@@ -1728,6 +1728,7 @@ static void capital_target_step(BmWorldBuffer *b) {
     b->capital_shift = (uint8_t)(b->capital_shift + 2u);
   }
   --b->capital_x;
+  b->capital_moved = 1u;
   if (b->capital_y < 196u) b->capital_y = (uint8_t)(b->capital_y + 2u);
 }
 
@@ -2102,6 +2103,7 @@ void bm_world_buffer_step(BmWorldBuffer *buffer) {
   /* VBI: fine/coarse scroll; the coarse step draws the new row (DRAW, DRBR,
      DRBT, DRUN, DRTNK, TNK or the CITY equivalents, then DRTR). */
   if(buffer->scroll_event){
+    buffer->scrolled = 1u;
     if (buffer->fine_phase) --buffer->fine_phase;
     else {
       buffer->fine_phase = 3;

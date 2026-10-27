@@ -97,6 +97,7 @@ Add an option to build a variant:
 | `ENHANCED_SOUND=1` | `bluemax-apollo-enhanced-sound` | sounds no longer cut each other off (not original) |
 | `TICK_RATE=50` | `bluemax-apollo-50hz` | PAL tempo: 50 updates per second, PAL POKEY clock |
 | `SOUND=samples` | `bluemax-apollo-samples` | sounds with a sample in `sounds/` play it instead of their POKEY sound (see below) |
+| `SMOOTH_SCROLL=1` | `bluemax-apollo-smooth` | the landscape moves 1 pixel every update instead of 2 every other one (not original, see below) |
 | `DEBUG_HUD=1` | `bluemax-apollo-debug` | developer HUD instead of the status line |
 | `CAPITAL_TEST=1` | `bluemax-apollo-capital-test1` | test aid: start near the capital |
 | `CAPITAL_TEST=2` | `bluemax-apollo-capital-test2` | as above, two capital targets already destroyed |
@@ -207,6 +208,33 @@ POKEY sounds.
 At start the Apollo build checks the mixer on fixed input and prints
 `mixer self-test passed`. With `SOUND_TEST=1` it also prints, on exit, how
 many samples were started and their peak level.
+
+### Smooth scrolling (`SMOOTH_SCROLL=1`)
+
+The original scrolls the landscape on every other vertical blank: two
+pixels, then a pause. With `SMOOTH_SCROLL=1` the renderer draws the landscape, and what stands on
+it (ships, vehicles, the gunsight, the capital target), half a step back on
+the update of each step, so the picture moves one pixel every update. The
+game itself, including every collision, is unchanged; aircraft, shots and
+explosions are drawn where the original draws them. On the V4, with the
+delayed swap below, the default build already looks smooth; this option
+makes no visible difference there.
+
+### Display swap delay
+
+The SAGA display pointer takes effect at once, and on the V4 the vertical
+blank interrupt arrives about a third of the way down the HDMI picture, so
+a frame swapped at the interrupt tears. The Apollo build therefore writes
+the new display pointer from a timer.device software interrupt 10 ms after
+the vertical blank, inside the HDMI blank, without waiting for it. Change
+the delay with `delay=N` (microseconds) on the command line, for example
+`bluemax-apollo-hd delay=9500`; `delay=0` swaps at the interrupt.
+
+`make tear-test` builds `bluemax-teartest`: three bars moving at 4, 8 and
+16 pixels per frame through the game's display code. A bar that breaks
+means tearing. F4 / joystick up adds 0.25 ms to the delay, F3 / joystick
+down takes it off; the white squares top left show the delay (one per
+0.25 ms), and it is printed on exit.
 
 ### 50 Hz
 

@@ -583,7 +583,13 @@ static void options_screen(BmFramebuffer *f,const BmGame *g){
 }
 /* The classic renderer: the Atari picture into a 320x200 CLUT8 framebuffer. */
 static void classic_render(const BmGame*g,BmFramebuffer*f){
-  int x,y,p=g->player.x,q=g->player.y;palette(f,g);
+  int x,y,p=g->player.x,q=g->player.y;
+  /* SMOOTH_SCROLL: on the update of a scroll step the playfield and what
+     stands on it are drawn half a step (1 pixel) back, so the picture
+     moves 1 pixel every update instead of 2 every other one. */
+  int ground_dx=bm_render_smooth_dx(&g->classic_world),ground_dy=-ground_dx;
+  (void)ground_dy;                           /* unused without the Atari page */
+  palette(f,g);
   bm_sprite_list.count=0u;
   /* Ownership only matters when some kinds stay classic. */
   own_draw=0;
@@ -685,15 +691,16 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
     classic_charset,
     &g->classic_world.rows[0][0],g->classic_world.source_column,
     g->classic_world.fine_phase,
-    (int16_t)(g->classic_world.quake_shift?-2:0),0,classic_zones,  /* QUAKE */
+    (int16_t)((g->classic_world.quake_shift?-2:0)+ground_dx),(int16_t)ground_dy,
+    classic_zones,                                               /* QUAKE */
     sizeof(classic_zones)/sizeof(classic_zones[0]));
   for(y=BM_ATARI_PLAYFIELD_HEIGHT;y<BM_SCREEN_HEIGHT;y++)
     memset(&f->pixels[y*BM_SCREEN_WIDTH],BM_CLASSIC_INITIAL_BASE,BM_SCREEN_WIDTH);
   if(g->classic_world.ship_active){
     /* SHIP/I5 writes SHPIM to P2 rows C1-11..C1 and SHPIM1 to P3 two
        lines lower; C1 starts at 15, above the playfield. */
-    int ship_x=bm_pm_x(g->classic_world.ship_x);
-    int ship_y=bm_pm_y((int)g->classic_world.ship_y-11);
+    int ship_x=bm_pm_x(g->classic_world.ship_x)+ground_dx;
+    int ship_y=bm_pm_y((int)g->classic_world.ship_y-11)+ground_dy;
     if(sprite(BM_SPRITE_SHIP,g->classic_world.ship_destroyed?1u:0u,ship_x,
               g->classic_world.ship_destroyed?ship_y-1:ship_y,
               g->classic_world.ship_destroyed?
@@ -710,8 +717,8 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
   if(g->classic_world.river_car_active){
     /* DRP23/IV writes the body to P2 rows C1..C1+4 and the tyres to P3
        one line lower. */
-    int car_x=bm_pm_x(g->classic_world.river_car_x);
-    int car_y=bm_pm_y(g->classic_world.river_car_y);
+    int car_x=bm_pm_x(g->classic_world.river_car_x)+ground_dx;
+    int car_y=bm_pm_y(g->classic_world.river_car_y)+ground_dy;
     const BmSprite *body;
     const BmSprite *tyres;
     if(g->classic_world.river_vehicle_truck){
@@ -804,25 +811,29 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
     int xx,yy,drawn;
     /* The image's top: P3 two lines above P2 (intact), or the wreck's
        first row.  Below $6BF=196 rows past scanline 198 are gone. */
-    drawn=sprite(BM_SPRITE_CAPITAL_TARGET,w->capital_wreck?1u:0u,x0,
-                 y0+(w->capital_wreck?3:6),p2_colour(g),w->gprior==4u);
+    /* SMOOTH_SCROLL: half a step back on the update of its own step. */
+    int cdx=BM_SMOOTH_SCROLL&&w->capital_moved?1:0,cdy=-cdx;
+    drawn=sprite(BM_SPRITE_CAPITAL_TARGET,w->capital_wreck?1u:0u,x0+cdx,
+                 y0+(w->capital_wreck?3:6)+cdy,p2_colour(g),w->gprior==4u);
     if(last_draw){
       int bottom=BM_ATARI_PLAYFIELD_HEIGHT;
       if(w->capital_shift&&bm_pm_y(199)<bottom)bottom=bm_pm_y(199);
-      last_draw->bottom=(int16_t)bottom;
+      last_draw->bottom=(int16_t)(bottom+cdy);
       last_draw->wide=(uint8_t)(w->capital_wreck&&w->capital_size==3u);
     }
     if(drawn)
     for(yy=y0;yy<=y0+22&&yy<BM_ATARI_PLAYFIELD_HEIGHT;++yy)
       for(xx=x0;xx<x0+64;++xx){
+        /* The cover at its place; drawn at (dx, dy) = shifted. */
+        int dx=xx+cdx,dy=yy+cdy;
         uint8_t cover,under;
-        if((unsigned)xx>=BM_SCREEN_WIDTH||yy<0)continue;
+        if((unsigned)dx>=BM_SCREEN_WIDTH||dy<0||yy<0)continue;
         cover=bm_world_capital_covers(w,xx,yy);
         if(!cover)continue;
-        under=f->pixels[yy*BM_SCREEN_WIDTH+xx];
+        under=f->pixels[dy*BM_SCREEN_WIDTH+dx];
         if(w->gprior==4u&&under!=BM_CLASSIC_INITIAL_BASE&&
            under!=BM_CLASSIC_DLI_BASE)continue;
-        f->pixels[yy*BM_SCREEN_WIDTH+xx]=cover==2u?29u:30u;
+        f->pixels[dy*BM_SCREEN_WIDTH+dx]=cover==2u?29u:30u;
       }
   }
   if(g->classic_world.enemy_fighter_shot_active&&
@@ -833,8 +844,8 @@ static void classic_render(const BmGame*g,BmFramebuffer*f){
   if(g->classic_world.target_sight_active){
     static const BmSprite sight={bm_asset_gunsight,16,9,16,0,0};
     /* GNSGHT writes the nine GNST rows to P2 ending at Y=$6AB. */
-    int sight_x=bm_pm_x(g->classic_world.target_sight_x);
-    int sight_y=bm_pm_y((int)g->classic_world.target_sight_y-8);
+    int sight_x=bm_pm_x(g->classic_world.target_sight_x)+ground_dx;
+    int sight_y=bm_pm_y((int)g->classic_world.target_sight_y-8)+ground_dy;
     if(sprite(BM_SPRITE_GUNSIGHT,0u,sight_x,sight_y,p2_colour(g),0u))
       bm_sprite_blit_colour(f,&sight,sight_x,sight_y,29u);
   }

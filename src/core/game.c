@@ -1355,6 +1355,7 @@ void bm_game_tick(BmGame *g,const BmInput *in){
   BmWorldBuffer *w=&g->classic_world;
   const BmSoundOut *o;
   uint8_t shot=w->enemy_fighter_shot_active,own=g->player_shot_active;
+  w->scrolled=w->capital_moved=0u;
   game_tick(g,in);
   if(g->mode==BM_STATE_OPTIONS)return;
   o=sound_out(g);

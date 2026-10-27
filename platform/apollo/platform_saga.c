@@ -12,6 +12,7 @@
 #include <intuition/intuition.h>
 #include <devices/timer.h>
 #include <exec/interrupts.h>
+#include <exec/ports.h>
 #include <exec/memory.h>
 #include <hardware/intbits.h>
 
@@ -20,6 +21,7 @@
 #define REG8(address) (*(volatile uint8_t *)(uintptr_t)(address))
 
 enum {
+    VPOSR=0x00dff004u, VHPOSR=0x00dff006u,
     SAGA_MODULO_WRITE=0x00dff1e6u, SAGA_POINTER_WRITE=0x00dff1ecu,
     SAGA_MODE_WRITE=0x00dff1f4u, SAGA_MODULO_READ=0x00dfe1e6u,
     SAGA_POINTER_READ=0x00dfe1ecu, SAGA_MODE_READ=0x00dfe1f4u,
@@ -109,6 +111,26 @@ static void pointer_show(void){
 }
 static struct timerequest eclock_request;
 static uint32_t eclock_hz;
+/* The display swap's delay after the vertical blank interrupt, in
+   microseconds (0: at once).  The V4 takes a new display pointer at once
+   (mid-picture: tearing), and its vertical blank interrupt comes about a
+   third into the HDMI picture.  At 640x400 a swap 10 ms later falls in the
+   blanking period (found with tools/tear_test.c on a V4).  The game can set it with delay=N on start. */
+uint32_t bm_swap_delay_us=10000u;
+
+/* The delayed swap: timer.device (UNIT_WAITECLOCK) replies at the E-clock
+   time vblank + delay to a port that causes a software interrupt; that
+   writes the pending display pointer.  The game keeps running meanwhile. */
+volatile uint32_t bm_swap_pointer;      /* pending display pointer, 0: none */
+extern void bm_swap_softint(void);
+__asm__(".text\n\t.even\n\t.globl _bm_swap_softint\n_bm_swap_softint:\n\t"
+        "move.l _bm_swap_pointer,d0\n\tbeq.s 1f\n\t"
+        "move.l d0,0xdff1ec\n\tclr.l _bm_swap_pointer\n"
+        "1:\tmoveq #0,d0\n\trts\n");
+static struct Interrupt swap_interrupt;
+static struct MsgPort swap_port;
+static struct timerequest swap_request;
+static uint8_t swap_open,swap_busy;
 static uint64_t eclock64(void){
     struct EClockVal v;ReadEClock(&v);return((uint64_t)v.ev_hi<<32)|v.ev_lo;
 }
@@ -122,6 +144,7 @@ typedef struct {
     BmFrameFormat format;
     uint32_t bytes;
     uint8_t shown,queued,drawing;
+    uint8_t leaving;                 /* still on screen until the delayed swap */
     uint32_t palette[BM_PALETTE_SIZE],uploaded_palette[BM_PALETTE_SIZE],saved_pointer;
     uint16_t saved_mode,saved_modulo;
     uint32_t vblank_seen;
@@ -137,6 +160,14 @@ typedef struct {
     uint32_t frames,missed,late_frames,signals,resyncs,underruns,max_error;
     uint32_t work_ticks,work_max,render_ticks,render_samples;
     uint32_t sample_peak;            /* SOUND_TEST: loudest sample output */
+    /* SOUND_TEST: vblanks seen since start and the shortest/longest gap
+       between two (E-clock ticks), to compare with the display's rate. */
+    uint32_t vbl_start,vbl_gap_min,vbl_gap_max;
+    uint64_t vbl_last;
+    /* SOUND_TEST: the beam's line (VPOSR/VHPOSR) when the display pointer
+       is written: in the vertical blank no frame can tear. */
+    uint32_t beam_count,beam_hist[16];
+    uint16_t beam_min,beam_max;
     uint32_t draw_ticks,draw_max,draw_frames;   /* acquire -> present */
     uint64_t draw_start;
     uint32_t draw_misses,miss_start,cpu_last,eclock_last;  /* SOUND_TEST */
@@ -163,6 +194,35 @@ static void upload_changed_palette(void){
     }
 }
 
+/* A swap still waiting (a late frame): take it back and show it now. */
+static void swap_finish(void){
+    if(swap_busy){
+        if(!CheckIO((struct IORequest*)&swap_request))AbortIO((struct IORequest*)&swap_request);
+        while(!CheckIO((struct IORequest*)&swap_request)){}
+        WaitIO((struct IORequest*)&swap_request);   /* done: only removes the reply */
+        swap_busy=0u;
+    }
+    if(bm_swap_pointer){REG32(SAGA_POINTER_WRITE)=bm_swap_pointer;bm_swap_pointer=0u;}
+}
+static void swap_open_timer(void){
+    swap_interrupt.is_Node.ln_Type=NT_INTERRUPT;swap_interrupt.is_Node.ln_Pri=32;
+    swap_interrupt.is_Node.ln_Name=(char*)"Blue Max swap";
+    swap_interrupt.is_Data=0;swap_interrupt.is_Code=(void(*)())bm_swap_softint;
+    swap_port.mp_Node.ln_Type=NT_MSGPORT;swap_port.mp_Flags=PA_SOFTINT;
+    swap_port.mp_SigTask=(struct Task*)&swap_interrupt;
+    swap_port.mp_MsgList.lh_Head=(struct Node*)&swap_port.mp_MsgList.lh_Tail;  /* NewList */
+    swap_port.mp_MsgList.lh_Tail=0;
+    swap_port.mp_MsgList.lh_TailPred=(struct Node*)&swap_port.mp_MsgList.lh_Head;
+    swap_request.tr_node.io_Message.mn_Node.ln_Type=NT_REPLYMSG;
+    swap_request.tr_node.io_Message.mn_ReplyPort=&swap_port;
+    swap_request.tr_node.io_Message.mn_Length=sizeof(swap_request);
+    swap_open=(uint8_t)(OpenDevice((CONST_STRPTR)TIMERNAME,UNIT_WAITECLOCK,
+                                   (struct IORequest*)&swap_request,0)==0);
+}
+static void swap_close_timer(void){
+    swap_finish();
+    if(swap_open){CloseDevice((struct IORequest*)&swap_request);swap_open=0u;}
+}
 static int saga_open(BmPlatform *p,const BmFrame *frame){
     unsigned i;int ammx_result;
     uint16_t mode=saga_mode_for(&frame->format);
@@ -186,6 +246,7 @@ static int saga_open(BmPlatform *p,const BmFrame *frame){
     else printf("Blue Max: AMMX row conversion off, using C\n");
     memset(&saga,0,sizeof(saga));
     timer_open(&saga);
+    if(saga.timer_open)swap_open_timer();
 #if BM_SOUND_TEST
     bm_profile_cycles=eclock_low;
 #endif
@@ -325,7 +386,8 @@ static void audio_write(SagaState *s){
 /* The buffer that is neither shown nor queued. */
 static void saga_acquire(BmPlatform *p,BmFrame *frame){
     SagaState *s=(SagaState*)p->userdata;uint8_t i;
-    for(i=0;i<VIDEO_BUFFERS;++i)if(i!=s->shown&&i!=s->queued)break;
+    for(i=0;i<VIDEO_BUFFERS;++i)
+        if(i!=s->shown&&i!=s->queued&&!(bm_swap_pointer&&i==s->leaving))break;
     s->drawing=i;
     if(s->timer_open)s->draw_start=eclock64();
 #if BM_SOUND_TEST
@@ -365,6 +427,17 @@ static unsigned saga_wait_vblank(BmPlatform *p){
         while(bm_vblank_count==s->vblank_seen)audio_signal(s,1);
     }else while(bm_vblank_count==s->vblank_seen){}
     passed=bm_vblank_count-s->vblank_seen;s->vblank_seen+=passed;++s->frames;
+#if BM_SOUND_TEST
+    if(s->timer_open&&passed==1u){
+        uint64_t t=eclock64();
+        if(s->vbl_last){
+            uint32_t gap=(uint32_t)(t-s->vbl_last);
+            if(!s->vbl_gap_min||gap<s->vbl_gap_min)s->vbl_gap_min=gap;
+            if(gap>s->vbl_gap_max)s->vbl_gap_max=gap;
+        }else s->vbl_start=bm_vblank_count;
+        s->vbl_last=t;
+    }else s->vbl_last=0u;
+#endif
     if(passed>1u)s->missed+=passed-1u;
     if(s->audio_on)s->work_start=eclock64();
 #if BM_SOUND_TEST
@@ -376,7 +449,22 @@ static unsigned saga_wait_vblank(BmPlatform *p){
 #endif
     if(s->queued!=NO_BUFFER){
         if(s->format.pixel==BM_PIXEL_CLUT8)upload_changed_palette();
-        REG32(SAGA_POINTER_WRITE)=(uint32_t)(uintptr_t)s->video[s->queued];
+#if BM_SOUND_TEST
+        { uint16_t v=REG16(VPOSR),h=REG16(VHPOSR),line=(uint16_t)(((v&7u)<<8)|(h>>8));
+          if(!s->beam_count||line<s->beam_min)s->beam_min=line;
+          if(line>s->beam_max)s->beam_max=line;
+          ++s->beam_hist[line>>6&15u];++s->beam_count; }
+#endif
+        if(bm_swap_delay_us&&swap_open){
+            uint64_t at=eclock64()+(uint32_t)((uint64_t)bm_swap_delay_us*eclock_hz/1000000u);
+            swap_finish();
+            s->leaving=s->shown;
+            bm_swap_pointer=(uint32_t)(uintptr_t)s->video[s->queued];
+            swap_request.tr_node.io_Command=TR_ADDREQUEST;
+            swap_request.tr_time.tv_secs=(uint32_t)(at>>32);  /* E-clock hi */
+            swap_request.tr_time.tv_micro=(uint32_t)at;        /* E-clock lo */
+            SendIO((struct IORequest*)&swap_request);swap_busy=1u;
+        }else REG32(SAGA_POINTER_WRITE)=(uint32_t)(uintptr_t)s->video[s->queued];
         s->shown=s->queued;s->queued=NO_BUFFER;
     }
 #if BM_TICK_RATE == 50
@@ -414,6 +502,17 @@ static void saga_close(BmPlatform *p){
                 (unsigned long)((uint64_t)s->work_ticks*1000000u/eclock_hz/(s->frames-1u)),
                 (unsigned long)((uint64_t)s->work_max*1000000u/eclock_hz),
                 (unsigned long)((uint64_t)s->render_ticks*1000000000u/eclock_hz/s->render_samples));
+            if(s->vbl_start&&now>s->started){
+                /* Vertical blanks per second, in hundredths. */
+                uint32_t vbls=bm_vblank_count-s->vbl_start;
+                /* The same 64-bit multiply-then-divide as the lines above
+                   (right on the V4); the rest in 32 bits. */
+                uint32_t centi=(uint32_t)((uint64_t)vbls*100u*eclock_hz/(now-s->started));
+                printf("Blue Max vblank: %lu.%02lu Hz, gap %lu..%luus\n",
+                    (unsigned long)(centi/100u),(unsigned long)(centi%100u),
+                    (unsigned long)((uint64_t)s->vbl_gap_min*1000000u/eclock_hz),
+                    (unsigned long)((uint64_t)s->vbl_gap_max*1000000u/eclock_hz));
+            }
             if(s->draw_frames&&s->eclock_sum){
                 uint32_t mhz=(uint32_t)(s->cpu_sum*eclock_hz/s->eclock_sum/1000000u);
                 unsigned k;
@@ -441,10 +540,21 @@ static void saga_close(BmPlatform *p){
         }
 #endif
     }
+#if BM_SOUND_TEST
+    if(s->beam_count){
+        unsigned k;
+        printf("Blue Max beam at swap: lines %u..%u, per 64 lines:",(unsigned)s->beam_min,
+               (unsigned)s->beam_max);
+        for(k=0;k<16u;++k)if(s->beam_hist[k])printf(" %u-%u:%lu",k*64u,k*64u+63u,
+               (unsigned long)s->beam_hist[k]);
+        printf("\n");
+    }
+#endif
     if(s->audio_failed)printf("Blue Max: timer.device unavailable, no sound\n");
     if(s->timer_open){CloseDevice((struct IORequest*)&eclock_request);TimerBase=0;}
     RemIntServer(INTB_VERTB,&vblank_interrupt);
     REG16(SAGA_MODULO_WRITE)=s->saved_modulo;
+    swap_close_timer();
     pointer_show();             /* Workbench redraws itself behind the window */
     REG32(SAGA_POINTER_WRITE)=s->saved_pointer;REG16(SAGA_MODE_WRITE)=s->saved_mode;
     bm_sprite_set_blitter(0);

@@ -30,6 +30,10 @@ ENHANCED_SOUND ?= 0
 # SOUND=samples plays the sounds/*.wav samples instead of their POKEY
 # sounds (the others stay POKEY); pokey = the original sound only.
 SOUND ?= pokey
+# SMOOTH_SCROLL=1 draws the playfield and what stands on it half a step
+# back on the update of each scroll step: 1 pixel every update instead of
+# 2 every other one (not original; the game itself is unchanged).
+SMOOTH_SCROLL ?= 0
 ifeq ($(filter pokey samples,$(SOUND)),)
 $(error SOUND=$(SOUND) is not available (pokey, samples))
 endif
@@ -52,6 +56,7 @@ BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter 1,$(DEBUG_HUD)),-debug,)
 BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter 1,$(SOUND_TEST)),-sound-test,)
 BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter 1,$(ENHANCED_SOUND)),-enhanced-sound,)
 BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter samples,$(SOUND)),-samples,)
+BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter 1,$(SMOOTH_SCROLL)),-smooth,)
 BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter 50,$(TICK_RATE)),-50hz,)
 BUILD_VARIANT := $(BUILD_VARIANT)$(if $(filter scaled hd,$(RENDERER)),-$(RENDERER),)
 TARGET := bluemax-apollo$(BUILD_VARIANT)
@@ -72,7 +77,10 @@ HOST_CFLAGS += -DBM_CAPITAL_TEST=$(CAPITAL_TEST)
 HOST_CFLAGS += -DBM_DEBUG_HUD=$(DEBUG_HUD)
 HOST_CFLAGS += -DBM_ENHANCED_SOUND=$(ENHANCED_SOUND)
 CFLAGS += -DBM_SOUND_SAMPLES=$(if $(filter samples,$(SOUND)),1,0)
+CFLAGS += -DBM_SMOOTH_SCROLL=$(SMOOTH_SCROLL)
 HOST_CFLAGS += -DBM_SOUND_SAMPLES=$(if $(filter samples,$(SOUND)),1,0)
+HOST_CFLAGS += -DBM_SMOOTH_SCROLL=$(SMOOTH_SCROLL)
+CFLAGS += -DBM_SMOOTH_SCROLL=$(SMOOTH_SCROLL)
 HOST_CFLAGS += -DBM_TICK_RATE=$(TICK_RATE)
 HOST_CFLAGS += -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0)
 HOST_CFLAGS += -DBM_RENDERER_HD=$(if $(filter hd,$(RENDERER)),1,0)
@@ -85,6 +93,7 @@ CFLAGS += -DBM_RENDERER_HD=$(if $(filter hd,$(RENDERER)),1,0)
 CFLAGS += -DBM_SOUND_TEST=$(SOUND_TEST)
 CFLAGS += -DBM_ENHANCED_SOUND=$(ENHANCED_SOUND)
 CFLAGS += -DBM_SOUND_SAMPLES=$(if $(filter samples,$(SOUND)),1,0)
+CFLAGS += -DBM_SMOOTH_SCROLL=$(SMOOTH_SCROLL)
 CFLAGS += -DBM_TICK_RATE=$(TICK_RATE)
 CFLAGS += -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0)
 CFLAGS += -DBM_RENDERER_HD=$(if $(filter hd,$(RENDERER)),1,0)
@@ -98,6 +107,7 @@ CFLAGS += -DBM_DEBUG_HUD=$(DEBUG_HUD)
 CFLAGS += -DBM_SOUND_TEST=$(SOUND_TEST)
 CFLAGS += -DBM_ENHANCED_SOUND=$(ENHANCED_SOUND)
 CFLAGS += -DBM_SOUND_SAMPLES=$(if $(filter samples,$(SOUND)),1,0)
+CFLAGS += -DBM_SMOOTH_SCROLL=$(SMOOTH_SCROLL)
 CFLAGS += -DBM_TICK_RATE=$(TICK_RATE)
 CFLAGS += -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0)
 CFLAGS += -DBM_RENDERER_HD=$(if $(filter hd,$(RENDERER)),1,0)
@@ -166,6 +176,14 @@ $(HOST_BUILD)/bluemax-headless: src/main.c src/core/renderer.c src/core/render_s
 	$(HOST_CC) $(HOST_CFLAGS) src/main.c src/core/renderer.c src/core/render_scaled.c src/core/render_hd.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/mixer.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/headless/platform_headless.c -o $@
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
+# The tearing test (tools/tear_test.c): the game's display code with
+# moving bars instead of the game.
+TEAR_TARGET := bluemax-teartest
+TEAR_OBJECTS := $(filter-out $(BUILD)/src/main.o,$(OBJECTS)) $(BUILD)/tools/tear_test.o
+.PHONY: tear-test
+tear-test: $(TEAR_TARGET)
+$(TEAR_TARGET): $(TEAR_OBJECTS)
+	$(CC) $(TEAR_OBJECTS) $(LDFLAGS) -o $@
 $(BUILD)/%.o: %.c Makefile
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@

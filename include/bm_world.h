@@ -254,6 +254,11 @@ typedef struct {
   uint8_t fine_phase;
   uint8_t scroll_clock;
   uint8_t scroll_event;
+  /* This update: the playfield took a fine scroll step (scrolled) and the
+     capital target took its step (capital_moved).  bm_game_tick clears
+     both; SMOOTH_SCROLL draws ground objects half a step back on the
+     update of their step. */
+  uint8_t scrolled, capital_moved;
   /* Sound requests for the game (EXXON.7 FBRGN/SW, EXXON.10 FM2GN/C9):
      a gun fired ($6AF=12) and a shell burst (XXX 2,$47 if $644=0). */
   uint8_t sound_gun_fired, sound_flak;

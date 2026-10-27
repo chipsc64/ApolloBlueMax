@@ -40,6 +40,14 @@ typedef enum {
   BM_SPRITE_CAPITAL_TARGET,/* variant: 0 intact (from the P3 top), 1 wreck */
   BM_SPRITE_KINDS
 } BmSpriteKind;
+#ifndef BM_SMOOTH_SCROLL
+#define BM_SMOOTH_SCROLL 0
+#endif
+/* SMOOTH_SCROLL: the playfield's horizontal offset this update (1 when it
+   took its scroll step: half a step back; the vertical one is -1 then). */
+static inline int bm_render_smooth_dx(const BmWorldBuffer *w){
+  return BM_SMOOTH_SCROLL&&w->scrolled?1:0;
+}
 /* wide: every image column twice (the capital wreck's SIZEP2 3 phase);
    bottom: the first screen line the object no longer reaches.
    left..below: while bm_sprite_hd_mask is set, the pixels the classic

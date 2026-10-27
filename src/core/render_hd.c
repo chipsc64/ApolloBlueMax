@@ -158,7 +158,8 @@ static void hd_render(const BmGame *g,BmFrame *frame){
   uint32_t pair[BM_PALETTE_SIZE];
   uint8_t textured[BM_CLASSIC_COLOUR_COUNT];
   /* Where bm_antic4_blit_playfield puts tile (0,0): fine scroll and QUAKE. */
-  int x0=(w->quake_shift?-2:0)+w->fine_phase*2-8,y0=-(int)w->fine_phase*2;
+  int x0=(w->quake_shift?-2:0)+w->fine_phase*2-8+bm_render_smooth_dx(w),
+      y0=-(int)w->fine_phase*2-bm_render_smooth_dx(w);
   unsigned y,i,any=0u;
   BmRowJob job;
   uint32_t profile;

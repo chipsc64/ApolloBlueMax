@@ -1,3 +1,5 @@
+#include <stdlib.h>
+#include <string.h>
 #include "bm_game.h"
 #include "bm_renderer.h"
 #ifndef BM_SOUND_TEST
@@ -37,13 +39,26 @@ static void sound_test(BmPokey *k){
 #ifndef BM_SOUND_SAMPLES
 #define BM_SOUND_SAMPLES 0
 #endif
-int main(void) {
+#if BM_APOLLO_68080
+/* platform_saga.c: the display swap's delay after the vertical blank, set
+   on start with delay=N (microseconds, 0 = at once). */
+extern uint32_t bm_swap_delay_us;
+#endif
+int main(int argc,char **argv) {
   static BmGame game; BmPlatform platform=bm_platform_create(); BmInput input={0};
   BmPokey *const pokeys[6]={&game.pokey,&game.pokey_extra[0],&game.pokey_extra[1],
     &game.pokey_extra[2],&game.pokey_extra[3],&game.pokey_extra[4]};
   const BmRenderer *renderer=bm_renderer_selected();
   BmFrame frame={{0u,0u,BM_PIXEL_CLUT8},0,0,0u};
   unsigned due=1u;
+  { int i;
+    for(i=1;i<argc;++i){
+#if BM_APOLLO_68080
+      if(!strncmp(argv[i],"delay=",6)){bm_swap_delay_us=(uint32_t)strtoul(argv[i]+6,0,10);continue;}
+#endif
+      (void)argv[i];
+    }
+  }
   bm_game_boot(&game,0x424d4158u);
   frame.format=renderer->format;frame.indexed=&game.framebuffer;
   if(!platform.open || platform.open(&platform,&frame)!=0) return 1;

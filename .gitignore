@@ -3,6 +3,7 @@ build/
 
 # Apollo executables and the headless build
 /bluemax-apollo*
+/bluemax-teartest*
 /bluemax-headless
 
 # Compiler and Python leftovers
@@ -16,6 +17,8 @@ docs/
 
 # Reference recordings of the original game (not ours to publish)
 *.mp4
+*.mov
+*.MOV
 *.mkv
 *.wav
 !sounds/*.wav

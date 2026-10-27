@@ -66,7 +66,8 @@ int main(void){
       bm_renderer_scaled.render(&game,&big);
       bm_renderer_hd.render(&game,&wide);
       /* The list is the HD render's; compare outside its HD objects. */
-      x0=(w->quake_shift?-2:0)+w->fine_phase*2-8;y0=-(int)w->fine_phase*2;
+      x0=(w->quake_shift?-2:0)+w->fine_phase*2-8+bm_render_smooth_dx(w);
+      y0=-(int)w->fine_phase*2-bm_render_smooth_dx(w);
       for(y=0;y<400u;++y)for(x=0;x<640u;++x){
         unsigned cx=x/2u,cy=y/2u;
         uint8_t index=game.framebuffer.pixels[cy*BM_SCREEN_WIDTH+cx];
