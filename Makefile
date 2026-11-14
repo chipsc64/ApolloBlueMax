@@ -1,4 +1,4 @@
-APOLLO_GCC_ROOT ?= /mnt/m/bluemax-master/Compilers/GCC-6.50-Stable
+APOLLO_GCC_ROOT ?= /mnt/m/bluemax-master/Compilers/GCC-6.50-Dev
 .DEFAULT_GOAL := all
 .PHONY: test-flight
 test-flight:

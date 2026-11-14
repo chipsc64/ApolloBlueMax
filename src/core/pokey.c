@@ -82,7 +82,10 @@ static unsigned channel_level(const BmPokey *p,unsigned c){
 
 void bm_pokey_render(BmPokey *p,int16_t *out,unsigned count,uint32_t rate){
   int32_t period[4],fast;
-  uint32_t step=(uint32_t)(((uint64_t)BM_POKEY_CLOCK<<16)/rate);
+  /* BM_POKEY_CLOCK*65536/rate in 32 bits (m68k GCC miscompiled the 64-bit
+     shift and divide once); the remainder stays below 2^16 for any rate
+     under 65536, as the audio rates are. */
+  uint32_t step=(BM_POKEY_CLOCK/rate<<16)+(BM_POKEY_CLOCK%rate<<16)/rate;
   unsigned n,c,mix[4],steady=0,events=0;
   periods(p,period);
   if(p->dirty){

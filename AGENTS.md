@@ -48,7 +48,7 @@ fill them in.
 
 ```sh
 # Apollo build (variants: see the option table in README.md)
-make APOLLO_GCC_ROOT=/home/chips/ApolloCrossDev/Compilers/GCC-6.50-Stable
+make APOLLO_GCC_ROOT=/home/chips/ApolloCrossDev/Compilers/GCC-6.50-Dev
 make APOLLO_GCC_ROOT=... RENDERER=hd SOUND=samples
 make APOLLO_GCC_ROOT=... SOUND_TEST=1 tear-test
 
