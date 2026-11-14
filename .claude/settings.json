@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "apolloknowledgebase": {
+      "source": { "source": "github", "repo": "ApolloTeam-dev/ApolloKnowledgeBase" }
+    }
+  },
+  "enabledPlugins": {
+    "akb@apolloknowledgebase": true
+  }
+}

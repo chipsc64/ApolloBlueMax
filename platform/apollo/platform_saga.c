@@ -232,6 +232,10 @@ static int saga_open(BmPlatform *p,const BmFrame *frame){
                (int)frame->format.pixel);
         return -1;
     }
+    /* The Apollo bit (SR bit 11): a ROM-patched AmigaOS such as Coffin
+       keeps this task's AMMX registers across task switches only when it
+       is set; ApolloOS always does.  It affects only this program. */
+    SetSR(0x800u,0x800u);
     ammx_result=bm_ammx_selftest();
     if(ammx_result!=0){printf("Blue Max: AMMX self-test failed (%d)\n",ammx_result);return -1;}
     printf("Blue Max: AMMX self-test passed\n");

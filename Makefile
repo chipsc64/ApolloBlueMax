@@ -97,7 +97,7 @@ CFLAGS += -DBM_SMOOTH_SCROLL=$(SMOOTH_SCROLL)
 CFLAGS += -DBM_TICK_RATE=$(TICK_RATE)
 CFLAGS += -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0)
 CFLAGS += -DBM_RENDERER_HD=$(if $(filter hd,$(RENDERER)),1,0)
-CFLAGS := -std=c99 -O2 -Wall -Wextra -Wpedantic -Werror -m68080 -m68881 -ffast-math -fomit-frame-pointer -DREGPARM=4 -DBM_APOLLO_68080=1 -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE) -noixemul -Iinclude -I$(ASSET_BUILD)
+CFLAGS := -std=c99 -O2 -Wall -Wextra -Wpedantic -Werror -m68080 -m68881 -ffast-math -fomit-frame-pointer -DBM_APOLLO_68080=1 -DBM_CLASSIC_TEST_PAGE=$(CLASSIC_TEST_PAGE) -noixemul -Iinclude -I$(ASSET_BUILD)
 CFLAGS += -MMD -MP
 ASFLAGS := -Fhunk -m68080 -m68881 -opt-speed -kick1hunks
 CFLAGS += -DBM_ATARI_SCROLL=$(ATARI_SCROLL)
@@ -111,7 +111,7 @@ CFLAGS += -DBM_SMOOTH_SCROLL=$(SMOOTH_SCROLL)
 CFLAGS += -DBM_TICK_RATE=$(TICK_RATE)
 CFLAGS += -DBM_RENDERER_SCALED=$(if $(filter scaled,$(RENDERER)),1,0)
 CFLAGS += -DBM_RENDERER_HD=$(if $(filter hd,$(RENDERER)),1,0)
-LDFLAGS := -m68080 -m68881 -noixemul
+LDFLAGS := -O2 -m68080 -m68881 -ffast-math -fomit-frame-pointer -noixemul
 C_SOURCES := src/main.c src/core/renderer.c src/core/render_scaled.c src/core/render_hd.c src/core/flight.c src/core/game.c src/core/pokey.c src/core/sound.c src/core/mixer.c src/core/render.c src/core/sprite.c src/core/tile.c src/core/world.c src/core/collision.c platform/apollo/platform_saga.c platform/apollo/ammx_selftest.c platform/apollo/sprite_ammx.c platform/apollo/row_selftest.c
 S_SOURCES := platform/apollo/ammx_blit.s
 OBJECTS := $(patsubst %.c,$(BUILD)/%.o,$(C_SOURCES)) $(patsubst %.s,$(BUILD)/%.o,$(S_SOURCES))
